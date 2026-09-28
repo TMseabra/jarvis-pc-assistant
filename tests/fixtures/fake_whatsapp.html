@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Fake WhatsApp</title></head>
+<body>
+<!-- Imita a estrutura do WhatsApp Web que os seletores de PLATFORMS["whatsapp"] usam. -->
+<div id="side">
+  <div contenteditable="true" id="search"></div>
+  <div id="pane-side"></div>
+</div>
+<div id="main-slot"></div>
+<script>
+const chats = {
+  "Anabela": [["in", "[09:00, 28/09/2026] Anabela: ", "Bom dia!"]],
+  "Ana Silva 🌸": [
+    ["in", "[19:01, 27/09/2026] Ana Silva: ", "Olá! Amanhã jantamos?"],
+    ["out", "[19:05, 27/09/2026] Eu: ", "Pode ser"],
+    ["in", "[19:06, 27/09/2026] Ana Silva: ", "Às 20h no sítio do costume?"],
+  ],
+  "Rui": [["in", "[10:00, 28/09/2026] Rui: ", "Viste o jogo?"]],
+};
+window.sent = [];
+const search = document.getElementById("search");
+const pane = document.getElementById("pane-side");
+
+function renderResults() {
+  const q = search.innerText.trim().toLowerCase();
+  pane.innerHTML = "";
+  for (const name of Object.keys(chats)) {
+    if (q && !name.toLowerCase().includes(q)) continue;
+    const item = document.createElement("div");
+    item.setAttribute("role", "listitem");
+    item.innerText = name + "\n" + chats[name].at(-1)[2];
+    item.onclick = () => openChat(name);
+    pane.appendChild(item);
+  }
+}
+
+function openChat(name) {
+  const slot = document.getElementById("main-slot");
+  slot.innerHTML = `<div id="main"><header><span dir="auto"></span></header>
+    <div id="msgs"></div><footer><div contenteditable="true" id="composer"></div></footer></div>`;
+  slot.querySelector("header span").innerText = name;
+  const msgs = slot.querySelector("#msgs");
+  for (const [dir, pre, text] of chats[name]) {
+    const m = document.createElement("div");
+    m.className = "message-" + dir;
+    m.innerHTML = `<div data-pre-plain-text=""><span class="selectable-text"></span></div>`;
+    m.firstChild.setAttribute("data-pre-plain-text", pre);
+    m.querySelector("span").innerText = text;
+    msgs.appendChild(m);
+  }
+  const composer = slot.querySelector("#composer");
+  composer.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      window.sent.push([name, composer.innerText]);
+      chats[name].push(["out", "[now] Eu: ", composer.innerText]);
+      composer.innerText = "";
+    }
+  });
+}
+
+search.addEventListener("input", renderResults);
+renderResults();
+</script>
+</body>
+</html>

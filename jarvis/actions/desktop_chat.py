@@ -1,0 +1,418 @@
+"""WhatsApp e Discord através das apps de desktop (UI Automation do Windows).
+
+As duas apps são páginas web dentro de uma janela (WebView2 / Electron) e expõem a
+interface ao Windows: dá para encontrar a caixa de pesquisa, a lista de conversas e a
+caixa de escrever sem depender de coordenadas. Tal como na versão web, antes de enviar
+confirmamos que a conversa aberta é a da pessoa pedida; se não der para confirmar,
+não enviamos.
+"""
+
+import os
+import re
+import time
+
+from jarvis.actions.messaging import (
+    ChatMessage,
+    MessagingError,
+    format_messages,
+    name_matches,
+    normalize_name,
+    pick_result,
+)
+
+WAIT_WINDOW_S = 25
+WAIT_UI_S = 8
+
+
+def _wait(predicate, timeout: float, interval: float = 0.25):
+    end = time.monotonic() + timeout
+    while True:
+        try:
+            value = predicate()
+        except Exception:
+            value = None
+        if value or time.monotonic() > end:
+            return value
+        time.sleep(interval)
+
+
+def _paste(text: str):
+    """Escreve `text` com colar (Ctrl+V): acentos, emojis e quebras de linha saem certos.
+    Repõe o que estava na área de transferência."""
+    import win32clipboard
+    from pywinauto.keyboard import send_keys
+
+    previous = None
+    win32clipboard.OpenClipboard()
+    try:
+        if win32clipboard.IsClipboardFormatAvailable(win32clipboard.CF_UNICODETEXT):
+            previous = win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT)
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, text)
+    finally:
+        win32clipboard.CloseClipboard()
+    send_keys("^v")
+    time.sleep(0.3)
+    if previous is not None:
+        win32clipboard.OpenClipboard()
+        try:
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, previous)
+        finally:
+            win32clipboard.CloseClipboard()
+
+
+class DesktopChat:
+    """Base: encontra/abre a janela da app e põe-na à frente."""
+
+    name = ""
+    app_id = ""  # para os.startfile("shell:AppsFolder\\<app_id>")
+
+    def _find_window(self):
+        raise NotImplementedError
+
+    def _ready(self, window) -> bool:
+        raise NotImplementedError
+
+    def window(self):
+        from pywinauto import Desktop  # noqa: F401 (garante que o pywinauto existe)
+
+        window = self._find_window()
+        if window is None:
+            os.startfile(f"shell:AppsFolder\\{self.app_id}")  # type: ignore[attr-defined]
+            window = _wait(self._find_window, WAIT_WINDOW_S)
+            if window is None:
+                raise MessagingError(f"Não consegui abrir o {self.name}.")
+        if window.is_minimized():
+            window.restore()
+        window.set_focus()
+        if not _wait(lambda: self._ready(window), WAIT_WINDOW_S):
+            raise MessagingError(f"O {self.name} abriu mas não ficou pronto (tens a sessão iniciada?).")
+        return window
+
+    def close(self):
+        pass  # as apps continuam abertas
+
+
+# --- Discord ---------------------------------------------------------------
+
+_DISCORD_TAG = re.compile(r"(?:Tag do servidor|Server Tag).*$", re.I)
+_DISCORD_NOISE = re.compile(
+    r"^(?:\d{1,2}:\d{2}|\d{2}/\d{2}/\d{4}.*|(?:segunda|terça|quarta|quinta|sexta)-feira.*|sábado.*|domingo.*|"
+    r"hoje.*|ontem.*|:\w+:|\d+|Clique para reagir|Modificar anexo|Excluir|Responder|\(editado\)|editado)$",
+    re.I,
+)
+
+
+def clean_discord_name(name: str) -> str:
+    """'RafostoTag do servidor: 5-O' -> 'Rafosto'; 'Sagaris, Rafosto3 membros' -> 'Sagaris, Rafosto'."""
+    name = re.sub(r"^Mensagens não lidas,\s*", "", name)
+    name = _DISCORD_TAG.sub("", name)
+    name = re.sub(r"\d+\s*membros?$", "", name)
+    return re.sub(r"\d+$", "", name).strip(" ,")
+
+
+def parse_discord_message(texts: list[tuple[str, str]]) -> tuple[str, str]:
+    """[(texto, automation_id), ...] de um item da lista de mensagens -> (autor, conteúdo).
+    O autor aparece antes do elemento message-timestamp-*; mensagens seguidas não o repetem."""
+    ts = next((i for i, (_, aid) in enumerate(texts) if aid.startswith("message-timestamp")), None)
+    before = texts[:ts] if ts is not None else []
+    after = texts[ts + 1:] if ts is not None else texts
+    author = clean_discord_name(" ".join(t for t, _ in before if t.strip()))
+    content = " ".join(t.strip() for t, _ in after if t.strip() and not _DISCORD_NOISE.match(t.strip()))
+    return author, content
+
+
+class DiscordDesktop(DesktopChat):
+    name = "Discord"
+    app_id = "com.squirrel.Discord.Discord"
+
+    def _find_window(self):
+        from pywinauto import Desktop
+
+        for w in Desktop(backend="uia").windows(class_name="Chrome_WidgetWin_1"):
+            title = w.window_text()
+            if title == "Discord" or title.endswith(" - Discord"):
+                return w
+        return None
+
+    def _ready(self, window) -> bool:
+        return bool(window.descendants(control_type="Edit") or self._dm_list(window))
+
+    @staticmethod
+    def _dm_list(window):
+        return next(
+            (l for l in window.descendants(control_type="List")
+             if (l.element_info.name or "") in ("Mensagens diretas", "Direct Messages")),
+            None,
+        )
+
+    def _current_chat(self, window) -> str:
+        """Nome da conversa aberta: título da janela ou nome da caixa de escrever."""
+        title = window.window_text()
+        if title.endswith(" - Discord"):
+            return title[: -len(" - Discord")].lstrip("@#").strip()
+        composer = self._composer(window)
+        if composer:
+            m = re.match(r"^(?:Conversar|Mensagem|Message)\s+(?:em|com|para)?\s*[@#]?(.+)$", composer.element_info.name or "")
+            if m:
+                return m.group(1).strip()
+        return ""
+
+    @staticmethod
+    def _composer(window):
+        return next(
+            (e for e in window.descendants(control_type="Edit")
+             if re.match(r"^(?:Conversar|Mensagem|Message)\b", e.element_info.name or "")),
+            None,
+        )
+
+    def _open_chat(self, window, contact: str) -> str:
+        from pywinauto.keyboard import send_keys
+
+        if name_matches(self._current_chat(window), contact):
+            return self._current_chat(window)
+        # 1) Conversas diretas na barra lateral.
+        dm_list = self._dm_list(window)
+        items = dm_list.children(control_type="ListItem") if dm_list else []
+        titles = [clean_discord_name(i.element_info.name or "") for i in items]
+        index = pick_result(titles, contact, fuzzy=True)
+        if index is not None:
+            contact = titles[index]  # o nome escolhido (pode ter sido "parecido")
+            link = items[index].descendants(control_type="Hyperlink")
+            if link:
+                link[0].invoke()  # sem mexer no rato
+            else:
+                items[index].click_input()
+        else:
+            # 2) Pesquisa rápida (Ctrl+K), como farias à mão.
+            window.set_focus()
+            send_keys("^k")
+            time.sleep(0.6)
+            _paste(contact)
+            time.sleep(1.2)
+            send_keys("{ENTER}")
+        opened = _wait(lambda: name_matches(self._current_chat(window), contact) and self._current_chat(window), WAIT_UI_S)
+        if not opened:
+            current = self._current_chat(window) or "outra conversa"
+            raise MessagingError(
+                f"Não encontrei a conversa '{contact}' no Discord (ficou aberta: '{current}'). Não enviei nada."
+            )
+        return opened
+
+    def read_messages(self, platform: str, contact: str, count: int = 10) -> str:
+        window = self.window()
+        title = self._open_chat(window, contact)
+        messages_list = _wait(lambda: next(
+            (l for l in window.descendants(control_type="List")
+             if re.match(r"^(?:Mensagens em|Messages in)\b", l.element_info.name or "")), None), WAIT_UI_S)
+        out, last_author = [], ""
+        for item in (messages_list.children(control_type="ListItem") if messages_list else [])[-count:]:
+            texts = [((t.element_info.name or ""), (t.element_info.automation_id or ""))
+                     for t in item.descendants(control_type="Text")]
+            author, content = parse_discord_message(texts)
+            author = author or last_author
+            last_author = author
+            if content:
+                out.append(ChatMessage(author=author, text=content))
+        return f"Conversa: {title} (Discord)\n" + format_messages(out)
+
+    def send_message(self, platform: str, contact: str, message: str, confirm=None) -> str | None:
+        from pywinauto.keyboard import send_keys
+
+        window = self.window()
+        title = self._open_chat(window, contact)
+        if confirm is not None:
+            message = confirm(title)
+            if not message:
+                return None
+        composer = _wait(lambda: self._composer(window), WAIT_UI_S)
+        if not composer:
+            raise MessagingError("Não encontrei a caixa de escrever do Discord. Não enviei nada.")
+        window.set_focus()
+        composer.set_focus()
+        _paste(message)
+        send_keys("{ENTER}")
+        return f"Mensagem enviada para {title} no Discord."
+
+
+# --- WhatsApp ----------------------------------------------------------------
+
+_WA_TIME = re.compile(
+    r"\s(?:\d{1,2}:\d{2}|ontem|hoje|segunda|terça|quarta|quinta|sexta|sábado|domingo|\d{2}/\d{2}/\d{4})\b", re.I
+)
+
+
+def whatsapp_chat_name(item_name: str) -> str:
+    """'A Princesa Sofia 💙 01:00 última mensagem' -> 'A Princesa Sofia 💙'."""
+    m = _WA_TIME.search(item_name)
+    return (item_name[: m.start()] if m else item_name).strip()
+
+
+class WhatsAppDesktop(DesktopChat):
+    name = "WhatsApp"
+    app_id = "5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"
+
+    def _find_window(self):
+        from pywinauto import Desktop
+
+        for w in Desktop(backend="uia").windows(class_name="WinUIDesktopWin32WindowClass"):
+            if w.window_text().endswith("WhatsApp"):
+                return w
+        return None
+
+    @staticmethod
+    def _document(window):
+        docs = window.descendants(control_type="Document")
+        return docs[0] if docs and len(docs[0].children()) else None
+
+    def _ready(self, window) -> bool:
+        doc = self._document(window)
+        return bool(doc and self._search_box(doc))
+
+    @staticmethod
+    def _search_box(doc):
+        return next((e for e in doc.descendants(control_type="Edit")
+                     if re.search(r"procurar|pesquisar|search", e.element_info.name or "", re.I)), None)
+
+    @staticmethod
+    def _composer(doc):
+        return next((e for e in doc.descendants(control_type="Edit")
+                     if re.search(r"mensagem|message", e.element_info.name or "", re.I)
+                     and not re.search(r"procurar|pesquisar|search", e.element_info.name or "", re.I)), None)
+
+    @staticmethod
+    def _chat_list(doc):
+        return next((g for g in doc.descendants(control_type="DataGrid")), None)
+
+    def _header_names(self, doc) -> list[str]:
+        """Textos no topo do painel da conversa (à direita da lista), onde está o nome."""
+        chat_list = self._chat_list(doc)
+        composer = self._composer(doc)
+        if not composer:
+            return []
+        left = chat_list.rectangle().right if chat_list else 0
+        top = doc.rectangle().top
+        names = []
+        for e in doc.descendants():
+            r = e.rectangle()
+            if r.left >= left and r.top < top + 110 and e.element_info.name:
+                names.append(e.element_info.name)
+        return names
+
+    def _current_chat(self, doc, contact: str) -> str:
+        return next((n for n in self._header_names(doc) if name_matches(n, contact)), "")
+
+    def _open_chat(self, window, contact: str) -> str:
+        from pywinauto.keyboard import send_keys
+
+        doc = self._document(window)
+        current = self._current_chat(doc, contact)
+        if current:
+            return current
+        search = self._search_box(doc)
+        # Nome completo; se o reconhecimento de voz o ouviu mal e não aparece nada,
+        # tenta só a primeira palavra e depois as primeiras letras.
+        first = contact.split()[0] if contact.split() else contact
+        index, items, titles = None, [], []
+        for term in dict.fromkeys([contact, first, first[:4]]):
+            if len(term) < 3:
+                continue
+            search.set_focus()
+            send_keys("^a{BACKSPACE}")
+            _paste(term)
+            time.sleep(1.5)
+            chat_list = self._chat_list(doc)
+            items = chat_list.children(control_type="DataItem") if chat_list else []
+            titles = [whatsapp_chat_name(i.element_info.name or "") for i in items]
+            index = pick_result(titles, contact, fuzzy=True)
+            if index is not None:
+                break
+        if index is None:
+            found = ", ".join(t for t in titles[:5] if t)
+            send_keys("{ESC}")
+            raise MessagingError(
+                f"Não encontrei a conversa '{contact}' no WhatsApp." + (f" Encontrei: {found}." if found else "")
+            )
+        contact = titles[index]  # o nome escolhido (pode ter sido "parecido")
+        items[index].click_input()
+        opened = _wait(lambda: self._current_chat(self._document(window), contact), WAIT_UI_S)
+        if not opened:
+            raise MessagingError(
+                f"Não consegui confirmar que a conversa aberta no WhatsApp é a de '{contact}'. Não enviei nada."
+            )
+        return whatsapp_chat_name(opened)
+
+    def read_messages(self, platform: str, contact: str, count: int = 10) -> str:
+        window = self.window()
+        title = self._open_chat(window, contact)
+        doc = self._document(window)
+        composer = self._composer(doc)
+        chat_list = self._chat_list(doc)
+        left = chat_list.rectangle().right if chat_list else 0
+        top, bottom = doc.rectangle().top + 110, composer.rectangle().top if composer else doc.rectangle().bottom
+        # As mensagens são as linhas do painel da conversa entre o cabeçalho e a caixa de escrever.
+        rows = [
+            e for e in doc.descendants(control_type="DataItem") + doc.descendants(control_type="ListItem")
+            if e.rectangle().left >= left and top <= e.rectangle().top < bottom and e.element_info.name
+        ]
+        seen, messages = set(), []
+        for row in rows:
+            text = " ".join((row.element_info.name or "").split())
+            if text and text not in seen:
+                seen.add(text)
+                messages.append(ChatMessage(author="", text=text))
+        return f"Conversa: {title} (WhatsApp)\n" + format_messages(messages[-count:])
+
+    def send_message(self, platform: str, contact: str, message: str, confirm=None) -> str | None:
+        from pywinauto.keyboard import send_keys
+
+        window = self.window()
+        title = self._open_chat(window, contact)
+        if confirm is not None:
+            message = confirm(title)
+            if not message:
+                return None
+        composer = _wait(lambda: self._composer(self._document(window)), WAIT_UI_S)
+        if not composer:
+            raise MessagingError("Não encontrei a caixa de escrever do WhatsApp. Não enviei nada.")
+        window.set_focus()
+        composer.set_focus()
+        _paste(message)
+        send_keys("{ENTER}")
+        return f"Mensagem enviada para {title} no WhatsApp."
+
+
+class ChatRouter:
+    """Escolhe, por plataforma, a app de desktop (se estiver instalada) ou a versão web."""
+
+    DESKTOP = {"whatsapp": WhatsAppDesktop, "discord": DiscordDesktop}
+
+    def __init__(self, web, mode: str = "auto", installed=None):
+        self.web = web
+        self.mode = mode
+        self._installed = installed  # para testes: set de app_ids instalados
+        self._desktop: dict[str, DesktopChat] = {}
+
+    def _desktop_installed(self, cls) -> bool:
+        if self._installed is not None:
+            return cls.app_id in self._installed
+        from jarvis.actions.system import list_start_apps
+
+        return any(app_id == cls.app_id for _, app_id in list_start_apps())
+
+    def backend(self, platform: str):
+        key = platform.strip().lower()
+        cls = self.DESKTOP.get(key)
+        if cls and self.mode != "web" and (self.mode == "desktop" or self._desktop_installed(cls)):
+            return self._desktop.setdefault(key, cls())
+        return self.web
+
+    def read_messages(self, platform: str, contact: str, count: int = 10) -> str:
+        return self.backend(platform).read_messages(platform, contact, count)
+
+    def send_message(self, platform: str, contact: str, message: str, confirm=None) -> str | None:
+        return self.backend(platform).send_message(platform, contact, message, confirm=confirm)
+
+    def close(self):
+        self.web.close()

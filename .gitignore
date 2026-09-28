@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.pytest_cache/
+# Perfil do browser (sessões do WhatsApp/Telegram/Discord)
+.jarvis/
+
+# Contactos pessoais do Jarvis
+contactos.txt

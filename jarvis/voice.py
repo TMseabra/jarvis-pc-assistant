@@ -1,0 +1,395 @@
+"""Voz: microfone -> Whisper (local) para entrada; voz neural portuguesa para saída."""
+
+import asyncio
+import difflib
+import glob
+import logging
+import os
+import re
+import sys
+import tempfile
+import uuid
+import warnings
+from pathlib import Path
+
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
+# Microfones virtuais/de sistema que alteram ou não captam a voz.
+_VIRTUAL_MICS = ("voicemod", "mapeador", "mapper", "stereo mix", "mistura estéreo", "cable output", "virtual")
+
+# Frases que o Whisper "ouve" no silêncio ou ruído.
+_HALLUCINATIONS = {
+    "obrigado", "obrigada", "obrigado por assistir", "legendas pela comunidade amaraorg",
+    "legendado por", "e aí",
+}
+
+# Ajuda o Whisper a acertar em nomes que ele não conhece bem.
+_WHISPER_PROMPT = (
+    "Jarvis, abre o Spotify, o WhatsApp, o Telegram, o Discord e o YouTube. Pesquisa na Internet. "
+    "Diz ao Claudinho para continuar."
+)
+
+
+def whisper_prompt() -> str:
+    """Texto de contexto do Whisper + os nomes do contactos.txt, para os acertar quando falas."""
+    try:
+        from jarvis.contacts import known_names
+
+        names = known_names()[:40]
+    except Exception:
+        names = []
+    return _WHISPER_PROMPT + (" Contactos: " + ", ".join(names) + "." if names else "")
+
+
+def pick_microphone(devices: list[tuple[int, str]], preferred: str | None = None) -> int | None:
+    """Escolhe o microfone: o que contém `preferred` no nome, senão o primeiro que não seja virtual.
+
+    `devices` é uma lista de (índice, nome) só com dispositivos de entrada.
+    Devolve None para usar o predefinido do sistema.
+    """
+    if preferred:
+        for index, name in devices:
+            if preferred.lower() in name.lower():
+                return index
+    for index, name in devices:
+        if not any(v in name.lower() for v in _VIRTUAL_MICS):
+            return index
+    return None
+
+
+def is_hallucination(text: str) -> bool:
+    cleaned = re.sub(r"[^\w\s]", "", text.lower()).strip()
+    if not cleaned or cleaned in _HALLUCINATIONS:
+        return True
+    # Com pouco som, o Whisper às vezes "lê" o initial_prompt ("abre o Spotify, o WhatsApp...").
+    prompt = re.sub(r"[^\w\s]", "", _WHISPER_PROMPT.lower())
+    return difflib.SequenceMatcher(None, cleaned, prompt).ratio() > 0.6
+
+
+# "Jarvis, abre o Spotify" / "Ok Jarvis ..." — o Whisper às vezes escreve "Jervis", "Djarvis"...
+_WAKE_WORD = re.compile(
+    r"^\W*(?:(?:ok|okay|olá|ola|ei|hey|ó|oh)\W+)?(?:jarvis|jervis|djarvis|jarvi|javis|jarbas|jarves)\b\W*",
+    re.IGNORECASE,
+)
+
+
+def strip_wake_word(text: str) -> str | None:
+    """Se a frase começa por "Jarvis", devolve o resto (pode ser ""); senão None."""
+    match = _WAKE_WORD.match(text)
+    return text[match.end():].strip() if match else None
+
+
+def speakable(text: str) -> str:
+    """Texto limpo para ler em voz alta (sem markdown, emojis, URLs longos)."""
+    text = re.sub(r"https?://\S+", "o link", text)
+    text = re.sub(r"[*_`#>|]", "", text)
+    text = "".join(ch for ch in text if ch.isalnum() or ch.isspace() or ch in ".,;:!?'\"()-%€ºª/")
+    return " ".join(text.split())
+
+
+def _add_nvidia_dll_dirs():
+    """No Windows, as DLLs CUDA instaladas por pip (nvidia-cublas-cu12, ...) não estão no PATH."""
+    if sys.platform != "win32":
+        return
+    try:
+        import nvidia
+    except ImportError:
+        return
+    for base in nvidia.__path__:
+        for bin_dir in glob.glob(os.path.join(base, "*", "bin")):
+            os.add_dll_directory(bin_dir)
+            os.environ["PATH"] = bin_dir + os.pathsep + os.environ["PATH"]
+
+
+class Transcriber:
+    """faster-whisper: tenta a GPU (float16) e cai para o CPU (int8) se não der."""
+
+    def __init__(self, model: str = "large-v3-turbo", device: str = "auto", language: str = "pt"):
+        from faster_whisper import WhisperModel
+
+        _add_nvidia_dll_dirs()
+        self.language = language
+        attempts = [("cuda", "float16"), ("cpu", "int8")] if device == "auto" else [
+            (device, "float16" if device == "cuda" else "int8")
+        ]
+        errors = []
+        for dev, compute in attempts:
+            # No CPU o large-v3-turbo é lento; o small chega.
+            name = model if dev == "cuda" or model != "large-v3-turbo" else "small"
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    try:
+                        self.model = WhisperModel(name, device=dev, compute_type=compute, local_files_only=True)
+                    except Exception:
+                        self.model = WhisperModel(name, device=dev, compute_type=compute)  # 1.ª vez: download
+                    self._warmup()
+                self.device, self.model_name = dev, name
+                return
+            except Exception as exc:
+                errors.append(f"{dev}: {exc}")
+        raise RuntimeError("Não consegui carregar o Whisper. " + " | ".join(errors))
+
+    def _warmup(self):
+        import numpy as np
+
+        # Obriga a carregar as bibliotecas CUDA já (falha aqui e não a meio de um comando).
+        list(self.model.transcribe(np.zeros(16000, dtype=np.float32), language=self.language)[0])
+
+    def transcribe(self, samples) -> str:
+        segments, _ = self.model.transcribe(
+            samples,
+            language=self.language,
+            beam_size=5,
+            vad_filter=True,
+            initial_prompt=whisper_prompt(),
+            condition_on_previous_text=False,
+        )
+        kept = [s.text for s in segments if s.no_speech_prob < 0.6]
+        text = " ".join(kept).strip()
+        return "" if is_hallucination(text) else text
+
+
+class Speaker:
+    """Voz neural (edge-tts, precisa de internet) com recurso ao pyttsx3 se falhar."""
+
+    def __init__(self, voice: str = "pt-PT-DuarteNeural", engine: str = "edge"):
+        self.voice = voice
+        self.engine = engine
+        self._fallback = None
+
+    def say(self, text: str):
+        text = speakable(text)
+        if not text:
+            return
+        if self.engine == "edge" and sys.platform == "win32":
+            for attempt in range(2):  # uma falha de rede pontual não deve mudar a voz
+                try:
+                    self._say_edge(text)
+                    return
+                except Exception as exc:
+                    logging.getLogger("jarvis").warning("voz neural falhou (tentativa %d): %s", attempt + 1, exc)
+        self._say_pyttsx3(text)
+
+    def _say_edge(self, text: str):
+        import edge_tts
+
+        path = Path(tempfile.gettempdir()) / f"jarvis_{uuid.uuid4().hex}.mp3"
+        try:
+            asyncio.run(edge_tts.Communicate(text, self.voice).save(str(path)))
+            _play_mp3_windows(path)
+        finally:
+            path.unlink(missing_ok=True)
+
+    def _say_pyttsx3(self, text: str):
+        if self._fallback is None:
+            import pyttsx3
+
+            self._fallback = pyttsx3.init()
+            # Mesmo género da voz neural escolhida, para não mudar de voz a meio da conversa.
+            female = any(n in self.voice for n in ("Raquel", "Francisca", "Female"))
+            wanted = ("zira", "helia", "maria", "female") if female else ("david", "mark", "male")
+            for v in self._fallback.getProperty("voices"):
+                if any(w in (v.name + v.id).lower() for w in wanted):
+                    self._fallback.setProperty("voice", v.id)
+                    break
+        self._fallback.say(text)
+        self._fallback.runAndWait()
+
+
+def _play_mp3_windows(path: Path):
+    """Toca um mp3 com o MCI do Windows (sem dependências extra) e espera que acabe.
+
+    Corre numa thread própria com COM em modo STA: o pywinauto (usado no Discord/WhatsApp)
+    põe a thread principal em modo MTA, e aí o MCI falha ("erro 266") — era por isso que,
+    depois da 1.ª resposta, a voz passava para a de recurso.
+    """
+    import ctypes
+    import threading
+
+    error: list[str] = []
+
+    def play():
+        import pythoncom
+
+        pythoncom.CoInitializeEx(pythoncom.COINIT_APARTMENTTHREADED)
+        mci = ctypes.windll.winmm.mciSendStringW
+        alias = f"jarvis{uuid.uuid4().hex[:8]}"
+        try:
+            code = mci(f'open "{path}" type mpegvideo alias {alias}', None, 0, None)
+            if code != 0:
+                error.append(f"MCI {code}")
+                return
+            try:
+                mci(f"play {alias} wait", None, 0, None)
+            finally:
+                mci(f"close {alias}", None, 0, None)
+        finally:
+            pythoncom.CoUninitialize()
+
+    thread = threading.Thread(target=play, daemon=True)
+    thread.start()
+    thread.join()
+    if error:
+        raise RuntimeError(f"Não consegui tocar o áudio ({error[0]}).")
+
+
+class Recorder:
+    """Grava do microfone usando deteção de voz (Silero VAD), não o volume do som.
+
+    Assim o ruído de fundo (ventoinhas, jogo) não conta como fala, e pausas curtas
+    ("hum...") não terminam a gravação: só acaba com `end_silence` segundos sem voz,
+    ou quando `should_stop()` devolve True (ex.: carregar em Enter).
+    """
+
+    RATE = 16000
+    CHUNK = 512  # 32 ms
+    START_CHUNKS = 3  # ~100 ms de voz seguida para começar
+    PRE_ROLL = 0.5  # segundos guardados antes de detetar a voz (não corta a 1.ª sílaba)
+
+    def __init__(self, mic_index: int | None):
+        from faster_whisper.vad import get_vad_model
+
+        self.mic_index = mic_index
+        self.vad = get_vad_model()
+
+    def speech_probability(self, previous, chunk) -> float:
+        import numpy as np
+
+        return float(self.vad(np.concatenate([previous, chunk]))[-1].squeeze())
+
+    def record(
+        self,
+        *,
+        wait_for_speech: float | None,
+        end_silence: float,
+        max_seconds: float = 120,
+        should_stop=lambda: False,
+        on_progress=None,
+    ):
+        """Devolve o áudio (float32, 16 kHz) ou None se ninguém falou."""
+        import collections
+
+        import numpy as np
+        import pyaudio
+
+        pa = pyaudio.PyAudio()
+        stream = pa.open(
+            format=pyaudio.paInt16, channels=1, rate=self.RATE, input=True,
+            input_device_index=self.mic_index, frames_per_buffer=self.CHUNK,
+        )
+        chunk_s = self.CHUNK / self.RATE
+        pre_roll = collections.deque(maxlen=int(self.PRE_ROLL / chunk_s))
+        frames: list = []
+        previous = np.zeros(self.CHUNK, dtype=np.float32)
+        voiced_run, speaking = 0, False
+        elapsed = silence = 0.0
+        try:
+            while True:
+                raw = stream.read(self.CHUNK, exception_on_overflow=False)
+                chunk = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+                prob = self.speech_probability(previous, chunk)
+                previous = chunk
+                elapsed += chunk_s
+                if not speaking:
+                    pre_roll.append(chunk)
+                    voiced_run = voiced_run + 1 if prob > 0.5 else 0
+                    if voiced_run >= self.START_CHUNKS:
+                        speaking, frames, silence = True, list(pre_roll), 0.0
+                    elif should_stop() or (wait_for_speech is not None and elapsed > wait_for_speech):
+                        return None
+                else:
+                    frames.append(chunk)
+                    silence = 0.0 if prob > 0.35 else silence + chunk_s
+                    duration = len(frames) * chunk_s
+                    if silence >= end_silence or should_stop() or duration >= max_seconds:
+                        break
+                if on_progress and int(elapsed / chunk_s) % 8 == 0:  # ~4x por segundo
+                    on_progress(speaking, len(frames) * chunk_s if speaking else 0.0, silence)
+        finally:
+            stream.stop_stream()
+            stream.close()
+            pa.terminate()
+        # Tira o silêncio do fim (fica 0.3 s).
+        keep = len(frames) - max(0, int((silence - 0.3) / chunk_s))
+        return np.concatenate(frames[:max(keep, 1)])
+
+
+def enter_pressed() -> bool:
+    """True se carregaram em Enter desde a última vez (sem bloquear). Só no Windows."""
+    if sys.platform != "win32":
+        return False
+    import msvcrt
+
+    pressed = False
+    while msvcrt.kbhit():
+        if msvcrt.getwch() in ("\r", "\n"):
+            pressed = True
+    return pressed
+
+
+class Voice:
+    def __init__(
+        self,
+        language: str = "pt-PT",
+        mic: str | None = None,
+        whisper_model: str = "large-v3-turbo",
+        whisper_device: str = "auto",
+        tts_voice: str = "pt-PT-DuarteNeural",
+        tts_engine: str = "edge",
+        end_silence: float = 3.0,
+        manual_silence: float = 15.0,
+    ):
+        self.mic_index, self.mic_name = self._find_microphone(mic)
+        self.recorder = Recorder(self.mic_index)
+        self.transcriber = Transcriber(whisper_model, whisper_device, language.split("-")[0])
+        self.speaker = Speaker(tts_voice, tts_engine)
+        self.end_silence = end_silence
+        self.manual_silence = manual_silence
+
+    @staticmethod
+    def _find_microphone(preferred: str | None) -> tuple[int | None, str]:
+        import pyaudio
+
+        pa = pyaudio.PyAudio()
+        try:
+            devices = []
+            host_api = pa.get_default_host_api_info()["index"]  # evita duplicados de outras APIs
+            for i in range(pa.get_device_count()):
+                info = pa.get_device_info_by_index(i)
+                if info["maxInputChannels"] > 0 and info["hostApi"] == host_api:
+                    devices.append((i, info["name"]))
+            index = pick_microphone(devices, preferred)
+            if index is None:
+                return None, pa.get_default_input_device_info()["name"]
+            return index, dict(devices)[index]
+        finally:
+            pa.terminate()
+
+    def listen(self, manual: bool = False, on_progress=None, wait_for_speech: float | None = 30) -> str | None:
+        """Grava e transcreve.
+
+        manual=False (mãos-livres): acaba com `end_silence` s de silêncio.
+        manual=True (modo Falar): acaba com Enter, ou com `manual_silence` s de silêncio.
+        """
+        audio = self.record(manual=manual, on_progress=on_progress, wait_for_speech=wait_for_speech)
+        return None if audio is None else self.transcribe(audio)
+
+    def record(self, manual: bool = False, on_progress=None, wait_for_speech: float | None = 30):
+        enter_pressed()  # descarta teclas carregadas antes
+        audio = self.recorder.record(
+            wait_for_speech=wait_for_speech,
+            end_silence=self.manual_silence if manual else self.end_silence,
+            should_stop=enter_pressed,
+            on_progress=on_progress,
+        )
+        if audio is None or len(audio) < Recorder.RATE * 0.3:
+            return None
+        return audio
+
+    def transcribe(self, audio) -> str | None:
+        return self.transcriber.transcribe(audio) or None
+
+    def say(self, text: str):
+        self.speaker.say(text)
