@@ -17,7 +17,7 @@ from jarvis.log import log
 from jarvis.log import setup as setup_log
 from jarvis.tools import ToolExecutor
 from jarvis.ui import MODES, UI
-from jarvis import updates
+from jarvis import understand, updates
 from jarvis.verify import verify
 from jarvis.voice import strip_wake_word
 
@@ -246,7 +246,8 @@ def session(ui, mode: str | None) -> int:
         return 1
 
     # Carrega o modelo e a lista de apps em segundo plano, para o 1.º pedido ser rápido.
-    threading.Thread(target=lambda: (brain.llm.warmup(), list_start_apps()), daemon=True).start()
+    threading.Thread(target=lambda: (brain.llm.warmup(), list_start_apps(), understand.load_dynamic()),
+                     daemon=True).start()
 
     ui.help(mode)
     if window:
@@ -302,6 +303,13 @@ def session(ui, mode: str | None) -> int:
                 say("Pronto, começámos uma conversa nova.")
                 busy.clear()
                 continue
+
+            # Nomes mal ouvidos ou mal escritos ("Lavaloranti"), gaguez e hesitações.
+            fixed = understand.correct(command)
+            if fixed != command:
+                log.info("corrigido: %r -> %r", command, fixed)
+                ui.info(f"Entendi: “{fixed}”")
+                command = fixed
 
             # "abre o Spotify e a Steam e manda..." -> um pedido de cada vez.
             parts = split_commands(command)

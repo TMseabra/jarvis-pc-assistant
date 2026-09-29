@@ -1,5 +1,6 @@
 """Ações no sistema operativo: abrir aplicações, sites e pesquisas."""
 
+import difflib
 import json
 import os
 import shutil
@@ -125,6 +126,10 @@ def find_start_app(name: str, apps: list[tuple[str, str]]) -> tuple[str, str] | 
         matches = [(n, a) for n, a in usable if rank(_fold(n))]
         if matches:
             return min(matches, key=lambda m: len(m[0]))
+    if len(target) >= 5:  # nome mal escrito ou mal ouvido: "steem" -> Steam
+        close = difflib.get_close_matches(target, {_fold(n): (n, a) for n, a in usable}, n=1, cutoff=0.8)
+        if close:
+            return {_fold(n): (n, a) for n, a in usable}[close[0]]
     return None
 
 

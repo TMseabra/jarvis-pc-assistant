@@ -8,7 +8,7 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
-from jarvis import followups, memes, music_intents, overlay
+from jarvis import followups, memes, music_intents, overlay, understand
 from jarvis.actions import diagnostics, vscode
 from jarvis.power_intents import parse_power
 from jarvis.actions.find import parse_image_request, parse_links_request
@@ -392,6 +392,7 @@ class Brain:
     def handle(self, text: str) -> str:
         # Voz e Telegram usam cada um o seu Brain, mas nunca mexem no PC ao mesmo tempo.
         with ACTION_LOCK:
+            text = understand.correct(text)  # idempotente: também cobre o Telegram e o texto escrito
             quick = self._pending_or_new_send(text)
             if quick is not None:
                 log.info("envio em dois passos: %r -> %r", text, quick)

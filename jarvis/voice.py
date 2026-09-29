@@ -44,6 +44,25 @@ def whisper_prompt() -> str:
     return _WHISPER_PROMPT + (" Contactos: " + ", ".join(names) + "." if names else "")
 
 
+def hotwords() -> str:
+    """Nomes que o Whisper deve preferir ao ouvir (apps, jogos e contactos): ele passa a escrever
+    "Valorant" e "Claudinho" em vez de "Lavaloranti" e "Cláudio"."""
+    try:
+        from jarvis import understand
+
+        names = [n for n in understand.vocabulary() if len(n) <= 20][:45]
+    except Exception:
+        names = []
+    return " ".join(dict.fromkeys(["Jarvis", *names]))
+
+
+def _echoes_hotwords(text: str) -> bool:
+    """Com pouco som, o Whisper pode 'ler' a lista de nomes em vez de ouvir alguma coisa."""
+    words = re.findall(r"\w+", text.lower())
+    known = set(re.findall(r"\w+", hotwords().lower()))
+    return len(words) >= 3 and all(w in known for w in words)
+
+
 def pick_microphone(devices: list[tuple[int, str]], preferred: str | None = None) -> int | None:
     """Escolhe o microfone: o que contém `preferred` no nome, senão o primeiro que não seja virtual.
 
@@ -70,16 +89,29 @@ def is_hallucination(text: str) -> bool:
 
 
 # "Jarvis, abre o Spotify" / "Ok Jarvis ..." — o Whisper às vezes escreve "Jervis", "Djarvis"...
+_CALL = r"(?:ok|okay|olá|ola|ei|hey|hei|ey|ó|oh)"
+_JARVIS = r"(?:jarvis|jervis|djarvis|jarvi|javis|jarbas|jarves)"
+# Nomes que o Whisper só escreve assim quando se chama "Ei Jarvis" ("Ei, Travis...").
+_JARVIS_CALLED = r"(?:jarvis|jervis|djarvis|jarvi|javis|jarbas|jarves|travis|charvis|garvis|darvis|jarvés|jarvês)"
 _WAKE_WORD = re.compile(
-    r"^\W*(?:(?:ok|okay|olá|ola|ei|hey|hei|ó|oh)\W+)?(?:jarvis|jervis|djarvis|jarvi|javis|jarbas|jarves)\b\W*",
+    rf"^\W*(?:{_CALL}\W+)*{_JARVIS}\b\W*|^\W*(?:{_CALL}\W+)+{_JARVIS_CALLED}\b\W*",
     re.IGNORECASE,
 )
+# "O André desapareceu. Ei, ei Jarvis, abre o Roblox": o pedido vem depois de outra conversa.
+# A meio da frase só conta com o "Ei/Hey" à frente ("o Jarvis é fixe" não é um pedido).
+_WAKE_MID = re.compile(rf"(?:{_CALL}\W+)+{_JARVIS_CALLED}\b\W*", re.IGNORECASE)
+_WAKE_AGAIN = re.compile(rf"[.,;!?]?\s*(?:{_CALL}\W+)+{_JARVIS_CALLED}\b\W*", re.IGNORECASE)
 
 
 def strip_wake_word(text: str) -> str | None:
-    """Se a frase começa por "Jarvis", devolve o resto (pode ser ""); senão None."""
-    match = _WAKE_WORD.match(text)
-    return text[match.end():].strip() if match else None
+    """Se a frase tem "(Ei) Jarvis", devolve o que vem a seguir (pode ser ""); senão None.
+
+    No início basta "Jarvis"; a meio da frase é preciso "Ei/Hey Jarvis"."""
+    match = _WAKE_WORD.match(text) or _WAKE_MID.search(text)
+    if not match:
+        return None
+    rest = text[match.end():].strip()
+    return _WAKE_AGAIN.sub(". ", rest).strip()  # "Ei Jarvis, X. Ei Jarvis, Y" -> "X. Y"
 
 
 def speakable(text: str) -> str:
@@ -146,11 +178,12 @@ class Transcriber:
             beam_size=5,
             vad_filter=True,
             initial_prompt=whisper_prompt(),
+            hotwords=hotwords() or None,
             condition_on_previous_text=False,
         )
         kept = [s.text for s in segments if s.no_speech_prob < 0.6]
         text = " ".join(kept).strip()
-        return "" if is_hallucination(text) else text
+        return "" if is_hallucination(text) or _echoes_hotwords(text) else text
 
 
 class Speaker:

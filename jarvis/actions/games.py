@@ -4,6 +4,7 @@
 lançar um jogo (URI steam://, argumentos do Riot Client, --exec do Battle.net...).
 """
 
+import difflib
 import json
 import os
 import re
@@ -193,6 +194,11 @@ def find_game(name: str, games: list[Game] | None = None) -> Game | None:
         matches = [g for g in games if rank(_fold(g.name))]
         if matches:
             return min(matches, key=lambda g: len(g.name))
+    if len(target) >= 5:  # nome mal escrito ou mal ouvido: "valorante" -> VALORANT
+        by_name = {_fold(g.name): g for g in games}
+        close = difflib.get_close_matches(target, by_name, n=1, cutoff=0.8)
+        if close:
+            return by_name[close[0]]
     return None
 
 

@@ -108,6 +108,11 @@ Preferes o terminal? `Jarvis.bat --terminal` (escolhes Escrever, Falar ou Mãos-
 - **Gravação:** deteção de voz (Silero VAD), não o volume; o ruído do jogo não conta como fala e as pausas não cortam a frase.
 - **Reconhecimento:** Whisper `large-v3-turbo` local. Na GPU NVIDIA demora ~0,5 s por frase; sem GPU passa para o `small` no CPU.
 - **Resposta falada:** voz neural portuguesa (Duarte ou Raquel, `edge-tts`), com o estilo "JARVIS" (mais grave e com um efeito digital) em `JARVIS_VOICE_STYLE=jarvis`. Sem internet usa as vozes do Windows.
+- **Perceber-te melhor (voz e texto):** antes de executar, o Jarvis corrige o que ouviu ou leu, e mostra "Entendi: …" quando muda alguma coisa.
+  - Nomes mal ouvidos ou mal escritos: "Lavaloranti" → Valorant, "Cláudio" → Claudinho, "espotifai" → Spotify, "Steem" → Steam, e nomes parecidos com as tuas apps, jogos, contactos e projetos.
+  - Gralhas no verbo ("abrre", "pesqisa") e hesitações ("epá", "hã", "isto, isto, isto").
+  - O Whisper recebe a lista dos teus nomes (apps, jogos, contactos) como dica, por isso acerta mais à primeira.
+  - O pedido pode vir depois de outra conversa na mesma gravação: "O André desapareceu. Ei Jarvis, abre o Roblox" executa só "abre o Roblox". Continua a ser preciso dizer "Ei Jarvis" (a meio da frase, "o Jarvis é fixe" não conta).
 - **Contactos:** em `contactos.txt` (fora do git), uma pessoa por linha: `Nome como aparece = formas como o dizes` (ex.: `Rafosto = rafa, rafael`).
 
 ## Onde ficam as coisas
@@ -164,11 +169,12 @@ jarvis/
   power_intents.py   # bloquear / desligar / reiniciar com pergunta
   memes.py overlay.py  # memes, texto e jumpscare no ecrã
   ducking.py         # baixar o som das outras apps enquanto fala
+  understand.py      # corrige nomes mal ouvidos/escritos, gralhas e hesitações
   voice.py           # microfone, Whisper, "Hey Jarvis", voz neural
   telegram_bot.py remote.py  # controlo pelo Telegram (+ /aovivo)
   llm/               # Ollama e Gemini com a mesma interface
   actions/           # apps, jogos, Spotify, YouTube, WhatsApp/Discord, sites, Classroom, diagnóstico…
-tests/               # pytest (384 testes)
+tests/               # pytest (419 testes)
 ```
 
 ## Testes
