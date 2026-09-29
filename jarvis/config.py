@@ -65,6 +65,8 @@ class Config:
     # "desktop" ou "web" forçam uma delas. (O Telegram usa sempre a versão web.)
     # Fotos, prints e gráficos (Ambiente de Trabalho\Jarvis): apagar os que têm mais de N dias (0 = nunca).
     keep_days: float = field(default_factory=lambda: _float_env("JARVIS_KEEP_DAYS", 7))
+    # Enquanto o Jarvis fala, as outras apps ficam a esta fração do volume (1 = não baixar).
+    duck_level: float = field(default_factory=lambda: _float_env("JARVIS_DUCK", 0.2))
     # Ao abrir uma app, maximizá-la e pô-la à frente (JARVIS_MAXIMIZE=0 desliga).
     maximize_windows: bool = field(default_factory=lambda: _env("JARVIS_MAXIMIZE", "1") not in ("0", "false", "nao"))
     messaging: str = field(default_factory=lambda: _env("JARVIS_MESSAGING", "auto").lower())

@@ -164,6 +164,12 @@ class Speaker:
         text = speakable(text)
         if not text:
             return
+        from jarvis.ducking import ducked
+
+        with ducked():  # baixa a música e os jogos enquanto falo
+            self._say(text)
+
+    def _say(self, text: str):
         if self.engine == "edge" and sys.platform == "win32":
             for attempt in range(2):  # uma falha de rede pontual não deve mudar a voz
                 try:
