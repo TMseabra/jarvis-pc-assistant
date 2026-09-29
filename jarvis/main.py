@@ -24,8 +24,9 @@ from jarvis.voice import strip_wake_word
 EXIT_WORDS = {"sair", "adeus", "exit", "quit", "tchau"}
 RESET_WORDS = {"esquece", "reset", "nova conversa"}
 YES_WORDS = {"s", "sim", "y", "yes", "claro", "confirmo", "envia", "podes"}
-# Mãos-livres: segundos, depois de o Jarvis responder, em que não é preciso dizer "Jarvis".
-FOLLOW_UP_SECONDS = 8
+# Mãos-livres: segundos, depois de o Jarvis responder, em que não é preciso dizer "Jarvis"
+# (0 = é sempre preciso começar por "Jarvis", para não apanhar conversas com outras pessoas).
+FOLLOW_UP_SECONDS = config.follow_up_seconds
 
 
 def is_yes(answer: str | None) -> bool:
@@ -189,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
         """No mãos-livres só reage a frases começadas por "Jarvis", exceto logo a seguir a responder."""
         nonlocal awake_until
         awake = time.monotonic() < awake_until
-        text = listen("À escuta… diz “Hey Jarvis, …”" if not awake else "À escuta… podes continuar",
+        text = listen("À escuta… começa por “Ei Jarvis, …”" if not awake else "À escuta… podes continuar",
                       hands_free=True)
         if not text:
             return None
@@ -200,9 +201,9 @@ def main(argv: list[str] | None = None) -> int:
             command = text
         if command is None:
             return text if awake else None
-        if not command:  # só "Jarvis"
+        if not command:  # só "Jarvis": a frase seguinte é o pedido
             say("Sim?")
-            awake_until = time.monotonic() + FOLLOW_UP_SECONDS
+            awake_until = time.monotonic() + max(FOLLOW_UP_SECONDS, 8)
             return None
         return command
 

@@ -67,6 +67,8 @@ class Config:
     keep_days: float = field(default_factory=lambda: _float_env("JARVIS_KEEP_DAYS", 7))
     # Enquanto o Jarvis fala, as outras apps ficam a esta fração do volume (1 = não baixar).
     duck_level: float = field(default_factory=lambda: _float_env("JARVIS_DUCK", 0.2))
+    # Mãos-livres: segundos depois de responder em que aceita frases sem "Jarvis" (0 = nunca).
+    follow_up_seconds: float = field(default_factory=lambda: _float_env("JARVIS_FOLLOW_UP", 0))
     # Ao abrir uma app, maximizá-la e pô-la à frente (JARVIS_MAXIMIZE=0 desliga).
     maximize_windows: bool = field(default_factory=lambda: _env("JARVIS_MAXIMIZE", "1") not in ("0", "false", "nao"))
     messaging: str = field(default_factory=lambda: _env("JARVIS_MESSAGING", "auto").lower())

@@ -339,6 +339,8 @@ class Recorder:
         import pyaudio
 
         self.wake_detected, self.wake_score = False, 0.0
+        self.wake_at_start = False  # o "Hey Jarvis" foi dito no início da frase (e não a meio)
+        speech_t0 = 0.0
         wake_buffer = np.zeros(0, dtype=np.int16)
         if wake is not None:
             wake.reset()
@@ -370,6 +372,7 @@ class Recorder:
                         self.wake_score = max(self.wake_score, score)
                         if score >= wake.threshold:
                             self.wake_detected = True
+                            self.wake_at_start = not speaking or elapsed - speech_t0 <= WAKE_START_S
                             if not speaking:  # "Hey Jarvis" conta como início da fala
                                 speaking, frames, silence = True, list(pre_roll), 0.0
                             break
@@ -378,6 +381,7 @@ class Recorder:
                     voiced_run = voiced_run + 1 if prob > 0.5 else 0
                     if voiced_run >= self.START_CHUNKS:
                         speaking, frames, silence = True, list(pre_roll), 0.0
+                        speech_t0 = elapsed
                     elif should_stop() or (wait_for_speech is not None and elapsed > wait_for_speech):
                         return None
                 else:
@@ -395,6 +399,10 @@ class Recorder:
         # Tira o silêncio do fim (fica 0.3 s).
         keep = len(frames) - max(0, int((silence - 0.3) / chunk_s))
         return np.concatenate(frames[:max(keep, 1)])
+
+
+# "Hey Jarvis" só conta se vier nos primeiros segundos da frase ("…e o Jarvis disse…" não conta).
+WAKE_START_S = 2.5
 
 
 class WakeWord:
@@ -499,8 +507,8 @@ class Voice:
 
     @property
     def wake_detected(self) -> bool:
-        """True se a última gravação (em mãos-livres) ouviu o "Hey Jarvis"."""
-        return getattr(self.recorder, "wake_detected", False)
+        """True se a última gravação (em mãos-livres) ouviu o "Hey Jarvis" no início da frase."""
+        return getattr(self.recorder, "wake_detected", False) and getattr(self.recorder, "wake_at_start", True)
 
     def record(self, manual: bool = False, on_progress=None, wait_for_speech: float | None = 30,
                hands_free: bool = False):
