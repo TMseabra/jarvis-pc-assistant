@@ -49,6 +49,8 @@ class TelegramController:
         )
         self.brain = Brain(executor=executor, on_tool=self._on_tool, on_tool_result=self._on_result,
                            approve=self._approve)
+        if config.confirm_ai_replies:
+            executor.confirm_ai = self._confirm_reply
 
     def _on_tool(self, call: ToolCall):
         if self.ui:
@@ -63,6 +65,12 @@ class TelegramController:
         if not is_sensitive(call.name, call.args) or self._chat is None:
             return True
         return self.bot.confirm(self._chat, f"Confirmas? {tool_label(call)}")
+
+    def _confirm_reply(self, platform: str, contact: str, message: str) -> str | None:
+        if self._chat is None:
+            return None
+        ok = self.bot.confirm(self._chat, "\n".join([f"Responder a {contact} ({platform}) com:", f"«{message}»"]))
+        return message if ok else None
 
     def handle(self, text: str, chat: int) -> str:
         log.info("telegram: %r", text)

@@ -262,12 +262,16 @@ class WhatsAppDesktop(DesktopChat):
         return None
 
     @staticmethod
-    def _document(window):
-        docs = window.descendants(control_type="Document")
-        return docs[0] if docs and len(docs[0].children()) else None
+    def _document(window, timeout: float = WAIT_UI_S):
+        """A página do WhatsApp dentro da janela (espera que tenha conteúdo)."""
+        def find():
+            docs = window.descendants(control_type="Document")
+            return docs[0] if docs and len(docs[0].children()) else None
+
+        return _wait(find, timeout)
 
     def _ready(self, window) -> bool:
-        doc = self._document(window)
+        doc = self._document(window, 0.3)
         return bool(doc and self._search_box(doc))
 
     @staticmethod
@@ -336,22 +340,20 @@ class WhatsAppDesktop(DesktopChat):
             )
         contact = titles[index]  # o nome escolhido (pode ter sido "parecido")
         items[index].click_input()
-        opened = _wait(lambda: self._current_chat(self._document(window), contact), WAIT_UI_S)
+        opened = _wait(lambda: self._current_chat(self._document(window, 0.5), contact), WAIT_UI_S)
         if not opened:
             raise MessagingError(
                 f"Não consegui confirmar que a conversa aberta no WhatsApp é a de '{contact}'. Não enviei nada."
             )
         return whatsapp_chat_name(opened)
 
-    def read_messages(self, platform: str, contact: str, count: int = 10) -> str:
-        window = self.window()
-        title = self._open_chat(window, contact)
+    def _messages_in_open_chat(self, window, count: int) -> list[ChatMessage]:
+        """As linhas do painel da conversa, entre o cabeçalho e a caixa de escrever."""
         doc = self._document(window)
         composer = self._composer(doc)
         chat_list = self._chat_list(doc)
         left = chat_list.rectangle().right if chat_list else 0
         top, bottom = doc.rectangle().top + 110, composer.rectangle().top if composer else doc.rectangle().bottom
-        # As mensagens são as linhas do painel da conversa entre o cabeçalho e a caixa de escrever.
         rows = [
             e for e in doc.descendants(control_type="DataItem") + doc.descendants(control_type="ListItem")
             if e.rectangle().left >= left and top <= e.rectangle().top < bottom and e.element_info.name
@@ -362,7 +364,77 @@ class WhatsAppDesktop(DesktopChat):
             if text and text not in seen:
                 seen.add(text)
                 messages.append(ChatMessage(author="", text=text))
-        return f"Conversa: {title} (WhatsApp)\n" + format_messages(messages[-count:])
+        return messages[-count:]
+
+    def read_messages(self, platform: str, contact: str, count: int = 10) -> str:
+        window = self.window()
+        title = self._open_chat(window, contact)
+        return f"Conversa: {title} (WhatsApp)\n" + format_messages(self._messages_in_open_chat(window, count))
+
+    def _set_filter(self, doc, which: str) -> bool:
+        """Carrega num filtro da lista de conversas: 'all-filter' (Tudo) ou 'label_item_1' (Não lidas)."""
+        names = {"all-filter": "Tudo", "label_item_1": "Não lidas"}
+        tab = next((t for t in doc.descendants(control_type="TabItem")
+                    if t.element_info.automation_id == which or t.element_info.name == names.get(which)), None)
+        if tab is None:
+            return False
+        try:
+            tab.select()
+        except Exception:
+            tab.click_input()
+        time.sleep(1.0)
+        return True
+
+    def open_latest_unread(self, window) -> tuple[str, bool]:
+        """Abre a conversa não lida mais recente (filtro "Não lidas"). Sem não lidas, abre a
+        conversa mais recente da lista. Devolve (nome, era_não_lida)."""
+        doc = self._document(window)
+        unread = self._set_filter(doc, "label_item_1")
+        try:
+            items = self._chat_list(doc).children(control_type="DataItem") if self._chat_list(doc) else []
+            was_unread = bool(unread and items)
+            if not was_unread:
+                if unread:
+                    self._set_filter(doc, "all-filter")
+                items = self._chat_list(doc).children(control_type="DataItem") if self._chat_list(doc) else []
+            if not items:
+                raise MessagingError("Não encontrei conversas no WhatsApp.")
+            title = whatsapp_chat_name(items[0].element_info.name or "")
+            items[0].click_input()
+            if not _wait(lambda: self._current_chat(self._document(window, 0.5), title), WAIT_UI_S):
+                raise MessagingError("Não consegui confirmar que conversa abri no WhatsApp. Não enviei nada.")
+            return title, was_unread
+        finally:
+            if unread:
+                self._set_filter(self._document(window), "all-filter")  # deixa a lista como estava
+
+    def reply_latest(self, message: str = "", compose=None, confirm=None) -> str | None:
+        """Responde na conversa não lida mais recente. Sem `message`, `compose(nome, mensagens)`
+        escreve a resposta; `confirm(plataforma, nome, texto)` pode mostrá-la antes de enviar."""
+        from pywinauto.keyboard import send_keys
+
+        window = self.window()
+        title, was_unread = self.open_latest_unread(window)
+        messages = self._messages_in_open_chat(window, 12)
+        if not messages:
+            raise MessagingError(f"Abri a conversa com {title} mas não consegui ler as mensagens. Não enviei nada.")
+        if not message:
+            if compose is None:
+                raise MessagingError("Não sei o que responder: diz-me o texto.")
+            message = compose(title, format_messages(messages))
+        if confirm is not None:
+            message = confirm("WhatsApp", title, message)
+            if not message:
+                return None
+        composer = _wait(lambda: self._composer(self._document(window, 0.5)), WAIT_UI_S)
+        if not composer:
+            raise MessagingError("Não encontrei a caixa de escrever do WhatsApp. Não enviei nada.")
+        window.set_focus()
+        composer.set_focus()
+        _paste(message)
+        send_keys("{ENTER}")
+        where = "(tinha mensagens por ler)" if was_unread else "(não havia conversas por ler: respondi na mais recente)"
+        return f"Respondi a {title} no WhatsApp {where}. Texto enviado: \"{message}\""
 
     def send_message(self, platform: str, contact: str, message: str, confirm=None) -> str | None:
         from pywinauto.keyboard import send_keys
@@ -373,7 +445,7 @@ class WhatsAppDesktop(DesktopChat):
             message = confirm(title)
             if not message:
                 return None
-        composer = _wait(lambda: self._composer(self._document(window)), WAIT_UI_S)
+        composer = _wait(lambda: self._composer(self._document(window, 0.5)), WAIT_UI_S)
         if not composer:
             raise MessagingError("Não encontrei a caixa de escrever do WhatsApp. Não enviei nada.")
         window.set_focus()
@@ -413,6 +485,12 @@ class ChatRouter:
 
     def send_message(self, platform: str, contact: str, message: str, confirm=None) -> str | None:
         return self.backend(platform).send_message(platform, contact, message, confirm=confirm)
+
+    def reply_latest(self, platform: str, message: str = "", compose=None, confirm=None) -> str | None:
+        backend = self.backend(platform)
+        if not hasattr(backend, "reply_latest"):
+            raise MessagingError(f"Responder à última mensagem ainda só funciona no WhatsApp de desktop.")
+        return backend.reply_latest(message, compose=compose, confirm=confirm)
 
     def close(self):
         self.web.close()

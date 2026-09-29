@@ -98,6 +98,9 @@ _APP_ALIASES = {
     "cmd": "Linha de Comandos",
     "loja": "Microsoft Store",
     "definicoes": "Definições",
+    "whatsappweb": "WhatsApp",
+    "wpp": "WhatsApp",
+    "zap": "WhatsApp",
     "configuracoes": "Definições",
 }
 
@@ -248,3 +251,45 @@ def web_search(query: str) -> str:
     """Pesquisa na web no browser escolhido."""
     open_url(search_url(query))
     return f"Pesquisei por '{query}'."
+
+
+def close_app(name: str) -> str:
+    """Fecha as janelas de uma aplicação (como carregar no X), pelo nome da janela ou do programa."""
+    import win32con
+    import win32gui
+    import win32process
+
+    target = _fold(_APP_ALIASES.get(_fold(name), name))
+    if len(target) < 3:
+        return f"Não percebi que aplicação fechar: '{name}'."
+    closed = set()
+
+    def visit(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd) or win32gui.GetParent(hwnd):
+            return
+        title = win32gui.GetWindowText(hwnd)
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        exe = _process_exe(pid)
+        if title and (target in _fold(title) or target in _fold(exe)) and "jarvis" not in _fold(title):
+            win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+            closed.add(title)
+
+    win32gui.EnumWindows(visit, None)
+    if not closed:
+        return f"Não encontrei nenhuma janela aberta de '{name}'."
+    return f"Fechei {', '.join(sorted(closed))[:120]}."
+
+
+def _process_exe(pid: int) -> str:
+    import win32api
+    import win32con
+    import win32process
+
+    try:
+        handle = win32api.OpenProcess(win32con.PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        try:
+            return Path(win32process.GetModuleFileNameEx(handle, 0)).stem
+        finally:
+            win32api.CloseHandle(handle)
+    except Exception:
+        return ""

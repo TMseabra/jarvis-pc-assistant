@@ -26,7 +26,9 @@ _PLATFORM = re.compile(r"\b(whatsapp|telegram|discord)\b", re.IGNORECASE)
 # "abre no VS Code o projeto X", "abre o site..." : não dividir a lista de objetos.
 _NO_LIST_SPLIT = re.compile(r"vs ?code|projeto|reposit[óo]rio|https?://|\.com\b|\.pt\b", re.IGNORECASE)
 _QUOTED = re.compile(r"[\"“«].*?[\"”»]")
-_NOT_BEFORE_ACTION = {"a", "de", "do", "da", "que", "para", "sem", "por", "o", "um", "uma", "se", "e"}
+_NOT_BEFORE_ACTION = {"a", "de", "do", "da", "que", "para", "sem", "por", "o", "um", "uma", "se", "e",
+                      "podes", "pode", "consegues", "consegue", "quero", "queria", "preciso", "vais", "vai",
+                      "favor", "jarvis", "ola", "olá", "boas", "ei", "hey"}
 _TO_CLAUDE = re.compile(
     r"(?:diz|diga|mand[ae]|escrev[ae]|pede)\s+(?:ao|a|para\s+o)\s+claud(?:e|inho)\b", re.IGNORECASE
 )

@@ -34,6 +34,15 @@ class GeminiProvider(ChatProvider):
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
 
+    def complete(self, system: str, prompt: str) -> str:
+        try:
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt, config=types.GenerateContentConfig(system_instruction=system)
+            )
+        except errors.APIError as exc:
+            raise LLMError(f"Erro do Gemini ({exc.code}): {exc.message}") from exc
+        return (response.text or "").strip()
+
     def _user_message(self, text: str):
         return types.Content(role="user", parts=[types.Part.from_text(text=text)])
 

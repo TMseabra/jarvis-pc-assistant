@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import ai_web, files, media, projects, system
+from jarvis.actions import ai_web, files, media, projects, steam, system
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -150,6 +150,61 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "reply_last_message",
+        "description": (
+            "Responde à última mensagem que o utilizador recebeu (a conversa por ler mais recente, a bolinha "
+            "verde). Usa para 'responde à última mensagem', 'vê quem tenho por responder e responde'. "
+            "message: o texto exato se o utilizador o disse; vazio para o Jarvis escrever a resposta como se "
+            "fosse o utilizador."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "platform": {"type": "string", "enum": ["whatsapp", "discord", "telegram"]},
+                "message": {"type": "string", "description": "Texto exato ditado, ou vazio."},
+            },
+            "required": ["platform"],
+        },
+    },
+    {
+        "name": "close_app",
+        "description": "Fecha uma aplicação aberta pelo nome (ex.: 'WhatsApp', 'Spotify', 'Steam').",
+        "parameters": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "Nome da aplicação."}},
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "steam_stats",
+        "description": (
+            "Vê as horas jogadas na Steam do utilizador (lê os ficheiros da Steam no PC, não precisa de "
+            "permissões nem de login): o jogo com mais horas, o total e o top. scope='favorites' para os "
+            "jogos nos favoritos, 'all' para a biblioteca toda."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"scope": {"type": "string", "enum": ["all", "favorites"]}},
+            "required": [],
+        },
+    },
+    {
+        "name": "continue_ai_chat",
+        "description": (
+            "Abre a última conversa do utilizador no Claude (ou ChatGPT) na web, tirada do histórico do "
+            "browser, e escreve lá uma mensagem (por omissão, pede para continuar). Usa para 'abre o Claude "
+            "na minha última conversa', 'diz ao Claude para continuar a conversa'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "site": {"type": "string", "enum": ["claude", "chatgpt"]},
+                "message": {"type": "string", "description": "O que escrever; vazio = continua."},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "read_messages",
         "description": "Abre uma conversa no WhatsApp Web, Telegram Web ou Discord e devolve as últimas mensagens.",
         "parameters": {
@@ -198,7 +253,8 @@ _DICTATION_GAP = re.compile(
 )
 # Palavras que não aparecem em nomes: se estiverem no "nome", não é um destinatário
 # ("manda à Ana o link do YouTube que te mandei").
-_NOT_NAME = {"o", "a", "os", "as", "um", "uma", "que", "se", "link", "foto", "ficheiro", "isto", "isso"}
+_NOT_NAME = {"o", "a", "os", "as", "um", "uma", "que", "se", "link", "foto", "ficheiro", "isto", "isso",
+             "ultima", "última", "ultimas", "últimas", "mensagem", "mensagens", "conversa", "quem", "pessoa"}
 _SAY_WITHOUT_QUE = re.compile(r"\s(?:a\s+dizer|dizendo)[:,]?\s+", re.IGNORECASE)
 _TRAILING_PLATFORM = re.compile(rf"\s+(?:no|na|pelo|pela)\s+{_PLATFORM_WORDS}\s*[.!]?$", re.IGNORECASE)
 
@@ -235,6 +291,19 @@ def extract_dictated_message(request: str) -> str | None:
     if not text:
         return None
     return text[0].upper() + text[1:]
+
+
+_REPLY_SAY = re.compile(r"\b(?:a\s+dizer|dizendo)[:,]?\s+(?:que\s+)?(.+)$", re.IGNORECASE)
+
+
+def extract_reply_text(request: str) -> str | None:
+    """"responde à última mensagem a dizer que já vou" -> "Já vou"; sem texto ditado -> None."""
+    quoted = _QUOTED.search(request)
+    m = quoted or _REPLY_SAY.search(request)
+    if not m:
+        return None
+    text = _TRAILING_PLATFORM.sub("", m.group(1).strip())
+    return text[0].upper() + text[1:] if text else None
 
 
 _UNTRUSTED_NOTE = (
@@ -276,6 +345,8 @@ class ToolExecutor:
     ):
         self._messenger = messenger
         self.confirm = confirm
+        self.confirm_ai: ConfirmSend | None = None  # mostra respostas escritas pelo Jarvis antes de enviar
+        self.compose: Callable[[str, str], str] | None = None  # escreve uma resposta (posto pelo Brain)
 
     @property
     def messenger(self) -> Messenger:
@@ -319,6 +390,21 @@ class ToolExecutor:
         if name == "open_project":
             (project,) = _require(args, "name")
             return projects.open_project(project, str(args.get("claude_prompt") or ""))
+        if name == "steam_stats":
+            return steam.steam_stats(str(args.get("scope") or "all"))
+        if name == "continue_ai_chat":
+            return ai_web.continue_last_chat(str(args.get("site") or "claude"), str(args.get("message") or ""))
+        if name == "close_app":
+            return system.close_app(*_require(args, "name"))
+        if name == "reply_last_message":
+            (platform,) = _require(args, "platform")
+            dictated = extract_reply_text(request) or str(args.get("message") or "").strip()
+            result = self.messenger.reply_latest(
+                platform, dictated, compose=self.compose,
+                # Respostas escritas pelo Jarvis (não ditadas) são mostradas antes de enviar.
+                confirm=None if dictated else self.confirm_ai,
+            )
+            return result or "O utilizador não aprovou a resposta. A mensagem NÃO foi enviada."
         if name == "read_messages":
             platform, contact = _require(args, "platform", "contact")
             contact = contacts.resolve(contact)  # "rafa" -> "Rafosto" (contactos.txt)

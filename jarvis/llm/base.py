@@ -73,6 +73,10 @@ class ChatProvider:
     def warmup(self):
         """Opcional: prepara o modelo antes do primeiro pedido."""
 
+    def complete(self, system: str, prompt: str) -> str:
+        """Pedido simples, sem ferramentas nem histórico (ex.: escrever uma resposta)."""
+        raise NotImplementedError
+
     # --- a implementar por cada provider -----------------------------------
 
     def _user_message(self, text: str):

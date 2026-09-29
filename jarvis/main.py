@@ -204,6 +204,8 @@ def main(argv: list[str] | None = None) -> int:
         messenger=ChatRouter(Messenger(config.browser_profile, notify=ui.info), config.messaging),
         confirm=confirm if config.confirm_send else None,
     )
+    if config.confirm_ai_replies:
+        executor.confirm_ai = confirm  # respostas escritas pelo Jarvis: mostrar antes de enviar
     try:
         turn_results: list = []  # resultados das ações do pedido atual, para a verificação final
 

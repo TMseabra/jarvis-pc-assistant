@@ -77,6 +77,11 @@ Pela linha de comandos: `.venv\Scripts\python -m jarvis.main --modo texto|falar|
 - **Pedidos vagos:** o Jarvis escolhe a interpretação mais provável e faz logo ("põe música", "quero rir um bocado"); só pergunta quando não há nenhuma interpretação segura.
 - **Verificação final:** no fim de cada pedido o Jarvis confere o resultado de todas as ações e diz "Terminei, correu tudo bem" ou o que falhou.
 - **Voz estilo JARVIS:** `JARVIS_VOICE_STYLE=jarvis` deixa a voz mais grave, um pouco mais rápida e com um efeito digital subtil.
+- **Responder a quem tens por responder:** "responde à última mensagem que recebi no WhatsApp" usa o filtro **Não lidas** do WhatsApp de desktop, abre a conversa mais recente, lê as mensagens e escreve uma resposta como tu escreverias. Por segurança, as respostas escritas pelo Jarvis são mostradas antes de enviar (✅/❌ no Telegram, s/n no PC); desliga com `JARVIS_CONFIRM_AI_REPLIES=0`. Se ditares o texto ("…a dizer que já vou"), envia logo.
+- **O último vídeo que viste:** "abre o meu último vídeo do YouTube" (ou "o penúltimo") vem do histórico do browser, não de uma pesquisa.
+- **Última conversa do Claude/ChatGPT:** "abre o Claude na minha última conversa e diz para continuar" abre a conversa mais recente (do histórico do browser) e escreve lá o pedido.
+- **Steam:** "qual é o jogo com mais horas nos meus favoritos?" lê as horas e a coleção de favoritos dos ficheiros da Steam no PC (sem login).
+- **Fechar apps:** "fecha o WhatsApp".
 - **Registo:** `.jarvis/jarvis.log` guarda o que foi ouvido, as ações e os erros (só no teu PC), para perceber o que falhou.
 
 ### "Hey Jarvis" e Telegram

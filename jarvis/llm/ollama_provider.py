@@ -86,6 +86,18 @@ class OllamaProvider(ChatProvider):
     def _user_message(self, text: str):
         return {"role": "user", "content": text}
 
+    def complete(self, system: str, prompt: str) -> str:
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+                options={"temperature": 0.6, "num_ctx": NUM_CTX},
+                keep_alive=KEEP_ALIVE,
+            )
+        except (ollama.ResponseError, ConnectionError, httpx.HTTPError) as exc:
+            raise LLMError(f"Erro do Ollama: {exc}") from exc
+        return (response.message.content or "").strip()
+
     def warmup(self):
         """Carrega o modelo na memória já, para o primeiro pedido não demorar."""
         try:

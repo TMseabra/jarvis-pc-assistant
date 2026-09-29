@@ -230,3 +230,69 @@ def test_open_watched_video(tmp_path, monkeypatch):
     assert "Recente" in media.open_watched_video(1)
     assert "Antigo" in media.open_watched_video(2)
     assert opened == ["https://www.youtube.com/watch?v=BBBBBBBBBBB", "https://www.youtube.com/watch?v=AAAAAAAAAAA"]
+
+
+# --- responder à última mensagem -------------------------------------------------
+
+from jarvis.tools import ToolExecutor  # noqa: E402
+
+
+class FakeRouter:
+    def __init__(self):
+        self.calls = []
+
+    def reply_latest(self, platform, message, compose=None, confirm=None):
+        if not message:
+            message = compose("Rafa", "[19:00] Rafa: bora jogar logo?")
+        if confirm is not None:
+            message = confirm("WhatsApp", "Rafa", message)
+            if not message:
+                return None
+        self.calls.append((platform, message))
+        return f"Respondi a Rafa. Texto enviado: \"{message}\""
+
+    def close(self):
+        pass
+
+
+def test_reply_last_message_composes_and_confirms():
+    router = FakeRouter()
+    executor = ToolExecutor(messenger=router)
+    executor.compose = lambda contact, messages: "bora, às 21h"
+    shown = []
+    executor.confirm_ai = lambda p, c, m: shown.append(m) or m
+    executor.run("reply_last_message", {"platform": "whatsapp"}, "responde à última mensagem que recebi")
+    assert shown == ["bora, às 21h"] and router.calls == [("whatsapp", "bora, às 21h")]
+
+
+def test_reply_last_message_dictated_is_sent_without_ai_confirmation():
+    router = FakeRouter()
+    executor = ToolExecutor(messenger=router)
+    executor.confirm_ai = lambda p, c, m: None  # se fosse chamado, cancelava
+    executor.run("reply_last_message", {"platform": "whatsapp"}, "responde à última mensagem a dizer que já vou")
+    assert router.calls == [("whatsapp", "Já vou")]
+
+
+def test_reply_cancelled_is_reported():
+    router = FakeRouter()
+    executor = ToolExecutor(messenger=router)
+    executor.compose = lambda contact, messages: "ok"
+    executor.confirm_ai = lambda p, c, m: None
+    out = executor.run("reply_last_message", {"platform": "whatsapp"}, "responde à última mensagem")
+    assert "NÃO foi enviada" in out and router.calls == []
+
+
+def test_compose_reply_uses_llm_and_strips_quotes():
+    from jarvis.brain import COMPOSE_SYSTEM, compose_reply
+
+    class LLM:
+        def complete(self, system, prompt):
+            assert system == COMPOSE_SYSTEM and "<conversa>" in prompt and "bora jogar" in prompt
+            return '"bora, logo às 21h"'
+    assert compose_reply(LLM(), "Rafa", "[19:00] Rafa: bora jogar?") == "bora, logo às 21h"
+
+
+def test_whatsapp_web_alias():
+    apps = [("WhatsApp", "5319275A.WhatsAppDesktop!App")]
+    assert system.find_start_app("WhatsApp Web", apps)[0] == "WhatsApp"
+    assert system.find_start_app("wpp", apps)[0] == "WhatsApp"

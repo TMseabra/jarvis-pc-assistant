@@ -77,6 +77,8 @@ class Config:
     )
     # Pedir confirmação antes de enviar mensagens em nome do utilizador.
     confirm_send: bool = field(default_factory=lambda: os.getenv("JARVIS_CONFIRM_SEND", "1") != "0")
+    # Mostrar as respostas escritas pelo Jarvis ("responde à última mensagem") antes de enviar.
+    confirm_ai_replies: bool = field(default_factory=lambda: os.getenv("JARVIS_CONFIRM_AI_REPLIES", "1") != "0")
 
 
 config = Config()
