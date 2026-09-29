@@ -43,10 +43,41 @@ _OFFER_OPEN = re.compile(
     r"queres\s+que\s+(?:eu\s+)?(?:te\s+)?abra\s+(?:o\s+|a\s+)?(?P<what>[^?.,!\n]{2,40})\?", re.IGNORECASE)
 
 
-def offer_from_reply(reply: str) -> list[Option]:
+# "After the Rain" de Zedd feat. Alessia Cara  /  “Blinding Lights” dos The Weeknd
+_QUOTED_TITLE = re.compile(
+    r"[\"“«](?P<title>[^\"”»\n]{2,60})[\"”»](?:\s*,?\s*(?:de|dos|das|do|da|by|por)\s+(?P<artist>[A-Z0-9À-Ý][^,.;:!?\n\"“«]{1,50}))?")
+_MUSIC_WORDS = re.compile(r"m[uú]sica|can[cç][aã]o|can[cç][õo]es|playlist|ouvir|tocar|spotify|[aá]lbum|artista|som\b",
+                          re.IGNORECASE)
+_VIDEO_WORDS = re.compile(r"v[ií]deo|youtube|tiktok|ver\b", re.IGNORECASE)
+
+
+def titles_from_reply(reply: str, request: str = "") -> list[Option]:
+    """Músicas/vídeos que o Jarvis sugeriu entre aspas -> opções para "mete uma dessas"."""
+    context = reply + " " + request
+    if _MUSIC_WORDS.search(context):
+        make = lambda q: ToolCall("music", {"action": "play", "query": q})  # noqa: E731
+    elif _VIDEO_WORDS.search(context):
+        make = lambda q: ToolCall("play_video", {"query": q})  # noqa: E731
+    else:
+        return []
+    options, seen = [], set()
+    for m in _QUOTED_TITLE.finditer(reply):
+        title = m.group("title").strip()
+        # O que o utilizador já estava a ouvir ("vibes semelhantes a 'Free'") não é sugestão.
+        before = reply[max(0, m.start() - 25):m.start()].lower()
+        if title.lower() in seen or re.search(r"(?:semelhantes?|parecid[oa]s?|igua(?:l|is)|como)\s+(?:a|à|ao)?\s*$", before):
+            continue
+        seen.add(title.lower())
+        artist = (m.group("artist") or "").strip()
+        artist = re.split(r"\s+(?:feat\.?|ft\.?|com|e)(?:\s+|$)", artist)[0] if artist else ""
+        options.append((title, make(f"{title} {artist}".strip())))
+    return options
+
+
+def offer_from_reply(reply: str, request: str = "") -> list[Option]:
     m = _OFFER_OPEN.search(reply)
     if not m:
-        return []
+        return titles_from_reply(reply, request)
     what = re.sub(r"^(?:conversa|app|aplica[cç][aã]o)\s+(?:d[oa]\s+|n[oa]\s+)?", "", m.group("what").strip(),
                   flags=re.IGNORECASE)
     site = next((url for key, url in _SOCIAL_URLS.items() if key in _fold(what).replace(" ", "")), None)
@@ -64,7 +95,9 @@ _YES = re.compile(r"^\W*(?:sim|s|quero|ok|okay|claro|pode ser|podes|bora|yes|iss
 _OPEN_WORDS = {"sim", "quero", "ok", "claro", "pode", "ser", "podes", "bora", "abre", "abrir", "abra", "mostra",
                "me", "mostrame", "por", "favor", "jarvis", "as", "os", "a", "o", "elas", "eles", "isso", "essa",
                "esse", "essas", "esses", "app", "apps", "aplicacao", "conversa", "conversas", "mensagens",
-               "mensagem", "tudo", "todas", "todos", "ai", "la", "entao", "no", "na", "e", "s", "yes"}
+               "mensagem", "tudo", "todas", "todos", "ai", "la", "entao", "ent", "no", "na", "e", "s", "yes",
+               "mete", "poe", "toca", "tocar", "por", "coloca", "essa", "uma", "um", "dessas", "desses", "destas",
+               "delas", "deles", "ouvir", "musica", "video", "ver", "qualquer", "vai", "manda", "ja"}
 _ALL = {"tudo", "todas", "todos", "elas", "eles", "essas", "esses"}
 _ORDINAL = {"primeira": 1, "primeiro": 1, "segunda": 2, "segundo": 2, "terceira": 3, "terceiro": 3,
             "quarta": 4, "quarto": 4, "quinta": 5, "quinto": 5}
@@ -88,6 +121,8 @@ def match(text: str, options: list[Option]) -> tuple[str, list[ToolCall]] | None
         return "run", [options[number - 1][1]]
     if not all(w in _OPEN_WORDS for w in words):
         return None  # é outro pedido
+    if {"uma", "um", "qualquer", "essa", "esse"} & set(words) and not _ALL & set(words) - {"elas", "eles"}:
+        return "run", [options[0][1]]  # "mete uma dessas", "põe essa": a primeira sugerida
     if len(options) == 1 or any(w in _ALL for w in words):
         return "run", [call for _, call in options]
     lines = [f"{i}. {label}" for i, (label, _) in enumerate(options, 1)]

@@ -8,7 +8,7 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
-from jarvis import followups
+from jarvis import followups, music_intents
 from jarvis.actions.find import parse_image_request, parse_links_request
 from jarvis.actions.site_search import parse_refine, parse_site_search
 from jarvis.tools import (
@@ -231,6 +231,9 @@ class Brain:
             return "\n".join(r.content for r in results)
         self.followups = []  # a oferta anterior já não se aplica
         # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
+        music = music_intents.parse_music(text)
+        if music:
+            return self._music(text, *music)
         site_query = parse_site_search(text) or parse_refine(text)
         if site_query:
             site, query = site_query
@@ -267,6 +270,35 @@ class Brain:
             platform, contact = target
             return f"Que mensagem queres enviar ao {contact} no {_PLATFORM_NAMES.get(platform, platform)}?"
         return None
+
+    def _music(self, text: str, kind: str, arg: str) -> str:
+        if kind == "next":
+            return self._run_tool(ToolCall("music", {"action": "next"}), request=text).content
+        if kind == "play":
+            return self._run_tool(ToolCall("music", {"action": "play", "query": arg}), request=text).content
+        # Parecidas com a que está a tocar: o modelo sugere, o Jarvis toca (ou pergunta qual).
+        from jarvis.actions import media
+
+        playing = media.spotify_title()
+        if not media.is_playing(playing):
+            return "Não está nada a tocar no Spotify. Diz-me com que música ou artista queres parecidas."
+        prompt = f"Sugere 3 músicas parecidas (mesmo género e vibe) com esta, que está a tocar: {playing}. Não repitas essa."
+        try:
+            suggestions = music_intents.parse_suggestions(self.llm.complete(music_intents.SIMILAR_SYSTEM, prompt), playing)
+        except LLMError as exc:
+            return f"Não consegui pensar em músicas parecidas: {exc}"
+        if not suggestions:
+            return f"Não consegui encontrar músicas parecidas com {playing}."
+        options = [(f"{t} - {a}", ToolCall("music", {"action": "play", "query": f"{t} {a}"})) for t, a in suggestions]
+        if arg == "play":
+            result = self._run_tool(options[0][1], request=text)
+            self.followups = options[1:]
+            more = "; ".join(f"{i}. {label}" for i, (label, _) in enumerate(options[1:], 1))
+            return f"Estava a tocar {playing}. {result.content}" + (
+                f"\nOutras parecidas: {more} (diz \"mete a 1\")." if more else "")
+        self.followups = options
+        lines = [f"Parecidas com {playing}:"] + [f"{i}. {label}" for i, (label, _) in enumerate(options, 1)]
+        return "\n".join(lines + ["Queres que meta alguma? Diz o número (ou \"mete uma\")."])
 
     def _run_tool(self, call: ToolCall, request: str) -> ToolResult:
         if self.on_tool:
@@ -309,7 +341,7 @@ class Brain:
                 contact = re.sub(r"^(?:o|a)\s+", "", asked.group("contact").strip(), flags=re.IGNORECASE)
                 self.pending_send = (platform, contact)
             if not self.followups:
-                self.followups = followups.offer_from_reply(reply)
+                self.followups = followups.offer_from_reply(reply, text)
             return reply
 
     def _handle(self, text: str) -> str:

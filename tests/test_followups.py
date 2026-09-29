@@ -51,3 +51,29 @@ def test_brain_yes_opens_what_was_offered(monkeypatch):
     assert brain.handle("sim") == "feito"
     assert opened == [("open_website", {"url": "https://www.linkedin.com/messaging/"})]
     assert brain.followups == []
+
+
+REPLY = ('Podes ouvir "After the Rain" de Zedd feat. Alessia Cara. É uma música com vibes semelhantes a '
+         '"Free". Também "Stay" dos The Kid LAROI.')
+
+
+def test_songs_suggested_by_the_model():
+    options = followups.offer_from_reply(REPLY, "que musica tem vibes igual")
+    assert [(label, call.args["query"]) for label, call in options] == [
+        ("After the Rain", "After the Rain Zedd"), ("Stay", "Stay The Kid LAROI")]
+    assert options[0][1].name == "music"
+
+
+def test_mete_uma_dessas_plays_the_first_suggestion():
+    options = followups.offer_from_reply(REPLY)
+    kind, calls = followups.match("mete uma dessas ent", options)
+    assert kind == "run" and calls[0].args == {"action": "play", "query": "After the Rain Zedd"}
+    assert followups.match("põe a stay", options)[1][0].args["query"] == "Stay The Kid LAROI"
+    assert followups.match("a segunda", options)[1][0].args["query"] == "Stay The Kid LAROI"
+    assert followups.match("abre o discord", options) is None
+
+
+def test_videos_suggested():
+    options = followups.offer_from_reply('Encontrei "Top 10 golos do Ronaldo" no YouTube.')
+    assert options[0][1].name == "play_video"
+    assert followups.offer_from_reply('Ok, está bem. "Nada" aqui.') == []
