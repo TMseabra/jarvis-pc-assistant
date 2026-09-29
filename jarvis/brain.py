@@ -9,7 +9,8 @@ from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
 from jarvis import followups
-from jarvis.actions.site_search import parse_site_search
+from jarvis.actions.find import parse_image_request, parse_links_request
+from jarvis.actions.site_search import parse_refine, parse_site_search
 from jarvis.tools import (
     TOOL_SPECS,
     ToolExecutor,
@@ -45,7 +46,7 @@ open_ai_chat para abrir uma ("abre a segunda", "a do TaskFlow"), continue_ai_cha
 - responder à última mensagem recebida / às conversas por ler (reply_last_message);
 - fechar uma aplicação (close_app);
 - entrar num jogo DENTRO do Roblox, só quando ele disser "no Roblox" (play_roblox); "abre o jogo X" sem Roblox é open_app;
-- bloquear o PC (lock_pc); ver mensagens novas no WhatsApp/Discord/Instagram/TikTok/LinkedIn (check_messages); pesquisar dentro de um site como o Standvirtual ou o OLX (site_search);
+- bloquear o PC (lock_pc); ver mensagens novas no WhatsApp/Discord/Instagram/TikTok/LinkedIn (check_messages); pesquisar dentro de um site como o Standvirtual ou o OLX (site_search); dar links da net (web_links); mostrar uma foto de alguma coisa (show_image);
 - perguntas que precisam da internet ou de informação atual (web_answer);
 - gráficos (make_chart; horas da Steam: steam_stats com chart);
 - print do ecrã (screenshot; pelo Telegram a imagem é enviada no chat);
@@ -230,7 +231,7 @@ class Brain:
             return "\n".join(r.content for r in results)
         self.followups = []  # a oferta anterior já não se aplica
         # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
-        site_query = parse_site_search(text)
+        site_query = parse_site_search(text) or parse_refine(text)
         if site_query:
             site, query = site_query
             return self._run_tool(ToolCall("site_search", {"site": site, "query": query}), request=text).content
@@ -239,6 +240,12 @@ class Brain:
         if _SCREENSHOT_REQUEST.search(text):
             result = self._run_tool(ToolCall("screenshot", {}), request=text)
             return result.content
+        image = parse_image_request(text)
+        if image:
+            return self._run_tool(ToolCall("show_image", {"query": image}), request=text).content
+        links = parse_links_request(text)
+        if links:
+            return self._run_tool(ToolCall("web_links", {"query": links}), request=text).content
         if _HELP_REQUEST.search(text):
             from jarvis.help import HELP_TEXT
 

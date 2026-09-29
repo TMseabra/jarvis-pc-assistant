@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import ai_web, charts, classroom, files, media, projects, roblox, screen, site_search, social, steam, system, web
+from jarvis.actions import ai_web, charts, classroom, files, find, media, projects, roblox, screen, site_search, social, steam, system, web
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -202,10 +202,36 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "web_links",
+        "description": (
+            "Pesquisa na net e devolve os 5 primeiros links, para o utilizador ver no chat. Usa para "
+            "'mostra-me carros da Alpina à venda', 'dá-me links sobre...', 'onde compro...', "
+            "'pesquisa no google...'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "O que pesquisar."}},
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "show_image",
+        "description": (
+            "Procura uma FOTO na net, abre-a no PC e manda-a no Telegram. Usa para 'mostra-me uma foto "
+            "de um Audi', 'manda-me uma imagem de um gato'. Não é para gerar imagens (isso é ask_ai)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "De quê, ex.: 'Audi RS6'."}},
+            "required": ["query"],
+        },
+    },
+    {
         "name": "site_search",
         "description": (
             "Pesquisa DENTRO de um site e abre os resultados: 'no Standvirtual pesquisa Audi A3', "
-            "'procura uma bicicleta no OLX', 'pesquisa iphone na Worten'. Não usar para YouTube, "
+            "'procura uma bicicleta no OLX', 'pesquisa iphone na Worten', 'mercedes de 100k para cima'. Põe o preço em 'query' tal como foi dito "
+            "(o Jarvis aplica o filtro de preço). Não usar para YouTube, "
             "Spotify, TikTok nem para pesquisas gerais na net."
         ),
         "parameters": {
@@ -652,8 +678,15 @@ class ToolExecutor:
             return text
         if name == "lock_pc":
             return system.lock_pc()
+        if name == "web_links":
+            (query,) = _require(args, "query")
+            if "google" in request.lower():
+                system.web_search(query)  # "pesquisa no google": abre também o Google no PC
+            return find.web_links(query)
+        if name == "show_image":
+            return find.find_image(*_require(args, "query"))
         if name == "site_search":
-            return site_search.site_search(*_require(args, "site", "query"))
+            return site_search.site_search(*_require(args, "site", "query"), request=request)
         if name == "classroom_start":
             return self.classroom.start()
         if name == "classroom_choose":  # só chamado pelo Brain, com a resposta à pergunta anterior

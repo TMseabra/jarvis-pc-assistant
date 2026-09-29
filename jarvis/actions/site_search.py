@@ -129,13 +129,132 @@ def search_url(site: str, query: str, get=None) -> tuple[str, str]:
     return site.strip(), "https://www.google.com/search?q=" + urllib.parse.quote(f"{query} {where}")
 
 
-def site_search(site: str, query: str) -> str:
-    query = query.strip().strip("\"'")
+# --- preços: "de 100k para cima", "até 20 mil euros", "entre 10k e 15k" --------------------
+
+_AMOUNT = r"(\d+(?:[.,]\d+)*)\s*(k|mil|m|milh(?:ão|ao|ões|oes)|€|euros?)?(?![a-zà-ú])"
+_PRICE_PATTERNS = [
+    ("range", re.compile(rf"\b(?:entre|de)\s+{_AMOUNT}\s+(?:e|a|até)\s+{_AMOUNT}", re.IGNORECASE)),
+    ("min", re.compile(rf"\b(?:de|com)\s+{_AMOUNT}\s+(?:para|pra|p)\s+cima\b", re.IGNORECASE)),
+    ("max", re.compile(rf"\b(?:de|com)\s+{_AMOUNT}\s+(?:para|pra|p)\s+baixo\b", re.IGNORECASE)),
+    ("min", re.compile(rf"\b(?:acima\s+d[eo]s?|mais\s+de|a\s+partir\s+de|desde|m[ií]nimo(?:\s+de)?|no\s+m[ií]nimo)\s+{_AMOUNT}",
+                       re.IGNORECASE)),
+    ("max", re.compile(rf"\b(?:at[ée]|abaixo\s+d[eo]s?|menos\s+de|m[aá]ximo(?:\s+de)?|no\s+m[aá]ximo)\s+{_AMOUNT}",
+                       re.IGNORECASE)),
+]
+_PRICE_WORDS = re.compile(r"\b(?:euros?|€|de\s+pre[cç]o|pre[cç]o|a\s+custar|que\s+custem?)\b", re.IGNORECASE)
+
+
+def _to_euros(number: str, unit: str | None) -> int | None:
+    unit = (unit or "").lower()
+    value = float(number.replace(".", "").replace(",", ".")) if not re.fullmatch(r"\d+[.,]\d{1,2}", number) \
+        else float(number.replace(",", "."))
+    if unit in ("k", "mil"):
+        value *= 1000
+    elif unit == "m" or unit.startswith("milh"):
+        value *= 1_000_000
+    elif not unit and 1900 <= value <= 2100:
+        return None  # "até 2020" é um ano, não um preço
+    return int(value)
+
+
+def parse_price(text: str) -> tuple[str, int | None, int | None]:
+    """'mercedes de 100k para cima' -> ('mercedes', 100000, None)."""
+    low = high = None
+    for kind, pattern in _PRICE_PATTERNS:
+        m = pattern.search(text)
+        if not m:
+            continue
+        if kind == "range":
+            low, high = _to_euros(m.group(1), m.group(2) or m.group(4)), _to_euros(m.group(3), m.group(4))
+        elif kind == "min":
+            low = _to_euros(m.group(1), m.group(2))
+        else:
+            high = _to_euros(m.group(1), m.group(2))
+        if low is None and high is None:
+            continue
+        text = (text[:m.start()] + text[m.end():])
+        break
+    text = _PRICE_WORDS.sub("", text)
+    return " ".join(text.split()), low, high
+
+
+# Filtro de preço no link de cada site ({low}/{high} em euros).
+PRICE_PARAMS = {
+    "standvirtual": ("search[filter_float_price:from]={low}", "search[filter_float_price:to]={high}"),
+    "olx": ("search[filter_float_price:from]={low}", "search[filter_float_price:to]={high}"),
+    "imovirtual": ("priceMin={low}", "priceMax={high}"),
+    "ebay": ("_udlo={low}", "_udhi={high}"),
+    "custojusto": ("ps={low}", "pe={high}"),
+    "vinted": ("price_from={low}", "price_to={high}"),
+}
+
+
+def add_price(url: str, key: str, low: int | None, high: int | None) -> str | None:
+    if low is None and high is None:
+        return url
+    params = PRICE_PARAMS.get(key)
+    if key == "amazon":  # em cêntimos: rh=p_36:MIN-MAX
+        return url + f"&rh=p_36:{(low or 0) * 100}-{(high * 100) if high else ''}"
+    if not params:
+        return None
+    parts = []
+    if low is not None:
+        parts.append(params[0].format(low=low))
+    if high is not None:
+        parts.append(params[1].format(high=high))
+    query = "&".join(urllib.parse.quote(p, safe="=") for p in parts)
+    return url + ("&" if "?" in url else "?") + query
+
+
+def _euros(value: int) -> str:
+    return f"{value:,}".replace(",", " ") + " €"
+
+
+LAST: dict = {}  # última pesquisa: {"site": ..., "query": ...} (para "e agora só de 100k para cima")
+
+
+def site_search(site: str, query: str, request: str = "") -> str:
+    query, low, high = parse_price(query.strip().strip("\"'"))
+    if low is None and high is None and request:
+        _, low, high = parse_price(request)
     name, url = search_url(site, query)
-    system.open_url(url)
+    LAST.update(site=site, query=query)
+    priced = add_price(url, site_key(site), low, high)
+    system.open_url(priced or url)
     if "google.com/search" in url and "google" not in site.lower():
         return f"Não sei pesquisar diretamente no {name}: abri o Google com \"{query}\" nesse site."
-    return f"Pesquisei \"{query}\" no {name}."
+    price = ""
+    if low is not None or high is not None:
+        span = (f"entre {_euros(low)} e {_euros(high)}" if low is not None and high is not None
+                else f"a partir de {_euros(low)}" if low is not None else f"até {_euros(high)}")
+        price = f", {span}" if priced else f" (não sei pôr o filtro de preço {span} neste site: põe-no tu)"
+    return f"Pesquisei \"{query}\" no {name}{price}."
+
+
+# "e agora mostra-me só os de 100k para cima", "agora até 20 mil"
+_REFINE_FILLER = {"e", "agora", "mostra", "me", "mostrame", "so", "só", "os", "as", "o", "a", "de", "com", "que",
+                  "custem", "custam", "filtra", "filtrar", "pesquisa", "procura", "jarvis", "apenas", "mas", "ai", "aí",
+                  "carros", "anuncios", "anúncios", "resultados", "então", "entao", "pff", "por", "favor"}
+
+
+def parse_refine(request: str) -> tuple[str, str] | None:
+    """Depois de uma pesquisa num site, um pedido só com preço refaz a pesquisa com o filtro."""
+    if not LAST:
+        return None
+    rest, low, high = parse_price(request)
+    if low is None and high is None:
+        return None
+    words = [w for w in re.findall(r"[\wÀ-ú]+", rest.lower()) if w not in _REFINE_FILLER]
+    if len(words) > 3:
+        return None
+    query = " ".join(words) or LAST["query"]
+    return LAST["site"], f"{query} {request_price_text(low, high)}"
+
+
+def request_price_text(low: int | None, high: int | None) -> str:
+    if low is not None and high is not None:
+        return f"entre {low} e {high} euros"
+    return f"de {low} para cima" if low is not None else f"até {high} euros"
 
 
 # "no standvirtual pesquisa audi a3", "pesquisa audi a3 no standvirtual", "procura no olx por uma bicicleta"

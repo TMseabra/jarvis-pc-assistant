@@ -48,3 +48,46 @@ def test_brain_site_search_shortcut(monkeypatch):
     brain = Brain(llm=FakeLLM([]), executor=ToolExecutor(messenger=FakeMessenger()))
     assert "Pesquisei \"audia\" no Standvirtual" in brain.handle("No standvirtual pesquisa sobre audia")
     assert opened == ["https://www.standvirtual.com/carros/q-audia"]
+
+
+from jarvis.actions.site_search import parse_price, parse_refine  # noqa: E402
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("mercedes de 100k para cima", ("mercedes", 100000, None)),
+    ("mercedes 100k", ("mercedes 100k", None, None)),
+    ("bmw até 20 mil euros", ("bmw", None, 20000)),
+    ("audi entre 10k e 15k", ("audi", 10000, 15000)),
+    ("porsche acima de 150.000€", ("porsche", 150000, None)),
+    ("carros até 2020", ("carros até 2020", None, None)),
+    ("iphone menos de 500 euros", ("iphone", None, 500)),
+    ("golf até 100 mercedes", ("golf mercedes", None, 100)),
+])
+def test_parse_price(text, expected):
+    assert parse_price(text) == expected
+
+
+def test_standvirtual_price_filter(monkeypatch):
+    opened = []
+    monkeypatch.setattr(site_search.system, "open_url", opened.append)
+    out = site_search.site_search("standvirtual", "mercedes de 100k para cima")
+    assert opened == ["https://www.standvirtual.com/carros/q-mercedes?search%5Bfilter_float_price%3Afrom%5D=100000"]
+    assert "a partir de 100 000 €" in out
+
+
+def test_refine_last_search_with_price(monkeypatch):
+    opened = []
+    monkeypatch.setattr(site_search.system, "open_url", opened.append)
+    assert parse_refine("e agora mostra me os mercedes so de 100k para cima") is None  # ainda sem pesquisa
+    site_search.site_search("standvirtual", "mercedes")
+    site, query = parse_refine("e agora mostra me os mercedes so de 100k para cima")
+    assert site == "standvirtual"
+    site_search.site_search(site, query)
+    assert opened[-1].endswith("q-mercedes?search%5Bfilter_float_price%3Afrom%5D=100000")
+    assert parse_refine("só até 20k")[1].startswith("mercedes")
+    assert parse_refine("abre o spotify") is None
+
+
+def test_site_without_price_filter_says_so(monkeypatch):
+    monkeypatch.setattr(site_search.system, "open_url", lambda url: None)
+    assert "põe-no tu" in site_search.site_search("worten", "portátil até 800 euros")

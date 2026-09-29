@@ -37,7 +37,7 @@ _LOGO = r"""
 _ICONS = {
     "open_app": "🚀", "open_website": "🌐", "web_search": "🔎", "play_video": "▶️ ",
     "music": "🎵", "open_project": "💻", "read_messages": "📨", "send_message": "💬",
-    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠", "reply_last_message": "↩️ ", "close_app": "✖️ ", "steam_stats": "🎮", "screenshot": "📸", "lock_pc": "🔒", "classroom_start": "🎓", "site_search": "🔎", "classroom_choose": "🎓", "check_messages": "📬", "web_answer": "🌍", "make_chart": "📊", "list_ai_chats": "💭", "open_ai_chat": "💭", "play_roblox": "🟥", "continue_ai_chat": "💭", "open_watched_video": "🕘",
+    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠", "reply_last_message": "↩️ ", "close_app": "✖️ ", "steam_stats": "🎮", "screenshot": "📸", "lock_pc": "🔒", "classroom_start": "🎓", "site_search": "🔎", "web_links": "🔗", "show_image": "🖼", "classroom_choose": "🎓", "check_messages": "📬", "web_answer": "🌍", "make_chart": "📊", "list_ai_chats": "💭", "open_ai_chat": "💭", "play_roblox": "🟥", "continue_ai_chat": "💭", "open_watched_video": "🕘",
 }
 
 
@@ -69,6 +69,8 @@ def tool_label(call: ToolCall) -> str:
         "screenshot": "A tirar um print do ecrã",
         "lock_pc": "A bloquear o PC",
         "classroom_start": "A abrir o Classroom",
+        "web_links": f"A procurar links: “{a.get('query', '')}”",
+        "show_image": f"A procurar uma foto de {a.get('query', '')}",
         "site_search": f"A pesquisar “{a.get('query', '')}” no {a.get('site', '')}",
         "classroom_choose": "Classroom",
         "check_messages": "A ver se tens mensagens novas no WhatsApp e no Discord",
