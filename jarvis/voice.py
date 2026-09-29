@@ -69,7 +69,7 @@ def is_hallucination(text: str) -> bool:
 
 # "Jarvis, abre o Spotify" / "Ok Jarvis ..." — o Whisper às vezes escreve "Jervis", "Djarvis"...
 _WAKE_WORD = re.compile(
-    r"^\W*(?:(?:ok|okay|olá|ola|ei|hey|ó|oh)\W+)?(?:jarvis|jervis|djarvis|jarvi|javis|jarbas|jarves)\b\W*",
+    r"^\W*(?:(?:ok|okay|olá|ola|ei|hey|hei|ó|oh)\W+)?(?:jarvis|jervis|djarvis|jarvi|javis|jarbas|jarves)\b\W*",
     re.IGNORECASE,
 )
 
@@ -320,12 +320,22 @@ class Recorder:
         max_seconds: float = 120,
         should_stop=lambda: False,
         on_progress=None,
+        wake=None,
     ):
-        """Devolve o áudio (float32, 16 kHz) ou None se ninguém falou."""
+        """Devolve o áudio (float32, 16 kHz) ou None se ninguém falou.
+
+        Com `wake` (WakeWord), vai também medindo a pontuação do "Hey Jarvis": fica em
+        self.wake_detected / self.wake_score depois da gravação.
+        """
         import collections
 
         import numpy as np
         import pyaudio
+
+        self.wake_detected, self.wake_score = False, 0.0
+        wake_buffer = np.zeros(0, dtype=np.int16)
+        if wake is not None:
+            wake.reset()
 
         pa = pyaudio.PyAudio()
         stream = pa.open(
@@ -345,6 +355,18 @@ class Recorder:
                 prob = self.speech_probability(previous, chunk)
                 previous = chunk
                 elapsed += chunk_s
+                if wake is not None and not self.wake_detected:
+                    # O openWakeWord trabalha em blocos de 80 ms (1280 amostras).
+                    wake_buffer = np.concatenate([wake_buffer, (chunk * 32767).astype(np.int16)])
+                    while len(wake_buffer) >= WakeWord.FRAME:
+                        score = wake.score(wake_buffer[:WakeWord.FRAME])
+                        wake_buffer = wake_buffer[WakeWord.FRAME:]
+                        self.wake_score = max(self.wake_score, score)
+                        if score >= wake.threshold:
+                            self.wake_detected = True
+                            if not speaking:  # "Hey Jarvis" conta como início da fala
+                                speaking, frames, silence = True, list(pre_roll), 0.0
+                            break
                 if not speaking:
                     pre_roll.append(chunk)
                     voiced_run = voiced_run + 1 if prob > 0.5 else 0
@@ -367,6 +389,37 @@ class Recorder:
         # Tira o silêncio do fim (fica 0.3 s).
         keep = len(frames) - max(0, int((silence - 0.3) / chunk_s))
         return np.concatenate(frames[:max(keep, 1)])
+
+
+class WakeWord:
+    """Deteção local de "Hey Jarvis" com o openWakeWord (funciona com música a tocar).
+
+    O modelo foi treinado com pronúncia inglesa ("Djárvis"): com o "J" português a pontuação
+    é baixa, por isso o Jarvis também aceita frases começadas por "Jarvis" via Whisper.
+    """
+
+    FRAME = 1280  # 80 ms a 16 kHz
+
+    def __init__(self, threshold: float = 0.3):
+        import warnings
+
+        from openwakeword.model import Model
+        from openwakeword.utils import download_models
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                self.model = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+            except Exception:
+                download_models(model_names=["hey_jarvis"])  # 1.ª vez (~5 MB)
+                self.model = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+        self.threshold = threshold
+
+    def score(self, frame) -> float:
+        return float(self.model.predict(frame).get("hey_jarvis", 0.0))
+
+    def reset(self):
+        self.model.reset()
 
 
 def enter_pressed() -> bool:
@@ -394,9 +447,17 @@ class Voice:
         voice_style: str = "normal",
         end_silence: float = 3.0,
         manual_silence: float = 15.0,
+        wake_threshold: float | None = 0.3,
     ):
         self.mic_index, self.mic_name = self._find_microphone(mic)
         self.recorder = Recorder(self.mic_index)
+        # "Hey Jarvis" local (openWakeWord). None = desligado; se não estiver instalado, fica só o Whisper.
+        self.wake = None
+        if wake_threshold:
+            try:
+                self.wake = WakeWord(wake_threshold)
+            except Exception as exc:
+                logging.getLogger("jarvis").warning("openWakeWord indisponível: %s", exc)
         self.transcriber = Transcriber(whisper_model, whisper_device, language.split("-")[0])
         self.speaker = Speaker(tts_voice, tts_engine, voice_style)
         self.end_silence = end_silence
@@ -430,13 +491,22 @@ class Voice:
         audio = self.record(manual=manual, on_progress=on_progress, wait_for_speech=wait_for_speech)
         return None if audio is None else self.transcribe(audio)
 
-    def record(self, manual: bool = False, on_progress=None, wait_for_speech: float | None = 30):
+    @property
+    def wake_detected(self) -> bool:
+        """True se a última gravação (em mãos-livres) ouviu o "Hey Jarvis"."""
+        return getattr(self.recorder, "wake_detected", False)
+
+    def record(self, manual: bool = False, on_progress=None, wait_for_speech: float | None = 30,
+               hands_free: bool = False):
         enter_pressed()  # descarta teclas carregadas antes
         audio = self.recorder.record(
             wait_for_speech=wait_for_speech,
             end_silence=self.manual_silence if manual else self.end_silence,
             should_stop=enter_pressed,
             on_progress=on_progress,
+            wake=self.wake if hands_free else None,
+            # Com música a tocar o detetor de voz pode nunca ouvir silêncio: limite por pedido.
+            max_seconds=20 if hands_free else 120,
         )
         if audio is None or len(audio) < Recorder.RATE * 0.3:
             return None

@@ -79,6 +79,14 @@ Pela linha de comandos: `.venv\Scripts\python -m jarvis.main --modo texto|falar|
 - **Voz estilo JARVIS:** `JARVIS_VOICE_STYLE=jarvis` deixa a voz mais grave, um pouco mais rápida e com um efeito digital subtil.
 - **Registo:** `.jarvis/jarvis.log` guarda o que foi ouvido, as ações e os erros (só no teu PC), para perceber o que falhou.
 
+### "Hey Jarvis" e Telegram
+
+- **Palavra de ativação (mãos-livres):** o Jarvis ouve "**Hey Jarvis**" localmente com o openWakeWord, que funciona mesmo com música a tocar. O modelo foi treinado com pronúncia inglesa ("Djárvis"); com o "J" português também funciona, porque frases começadas por "Jarvis" são apanhadas pelo Whisper. Para veres como dizer para ativar sempre: `Jarvis.bat --testar-jarvis` (barra ao vivo). Sensibilidade: `JARVIS_WAKE_THRESHOLD` (0.3 por omissão; 0 desliga).
+- **Telegram:** `Jarvis.bat --telegram` guia a configuração. Crias um bot no **@BotFather**, colas o token, envias `/start` ao bot e o Jarvis guarda o teu ID. A partir daí mandas pedidos pelo Telegram ("abre o Spotify", "continua o trabalho no meu GitHub") e ele responde com o resultado e a verificação.
+  - Só aceita mensagens dos IDs em `JARVIS_TELEGRAM_ALLOWED_IDS`; as outras são ignoradas sem resposta.
+  - Ações sensíveis (lançar o Claude Code a mexer em código; no futuro apagar ficheiros, `git push`, comandos) pedem confirmação com botões ✅/❌. Sem resposta em 2 minutos, não faz.
+  - Sempre ligado: o assistente oferece-se para arrancar com o Windows em segundo plano (`--servico`, sem janela). Só um Jarvis lê o bot de cada vez.
+
 ### Voz
 
 - **Gravação:** deteção de voz (Silero VAD), não o volume. O ruído de fundo (ventoinhas, jogo) não conta como fala e as pausas não cortam a frase.

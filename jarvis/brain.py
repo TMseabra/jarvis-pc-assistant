@@ -1,6 +1,7 @@
 """Interpretação de comandos em linguagem natural: o modelo escolhe ferramentas e o Jarvis executa-as."""
 
 import re
+import threading
 from collections.abc import Callable
 
 from jarvis.actions.messaging import MessagingError
@@ -93,6 +94,7 @@ def is_action_request(text: str) -> bool:
 
 
 MAX_STEPS = 6
+ACTION_LOCK = threading.RLock()
 
 
 class Brain:
@@ -102,11 +104,13 @@ class Brain:
         executor: ToolExecutor | None = None,
         on_tool: Callable[[ToolCall], None] | None = None,
         on_tool_result: Callable[[ToolResult], None] | None = None,
+        approve: Callable[[ToolCall], bool] | None = None,
     ):
         self.llm = llm or create_provider(config, SYSTEM_PROMPT, TOOL_SPECS)
         self.executor = executor or ToolExecutor()
         self.on_tool = on_tool  # avisado antes de cada ferramenta (para a interface)
         self.on_tool_result = on_tool_result  # e depois, com o resultado
+        self.approve = approve  # opcional: autorização antes de ações sensíveis (Telegram)
 
     def reset(self):
         self.llm.reset()
@@ -115,6 +119,12 @@ class Brain:
         if self.on_tool:
             self.on_tool(call)
         log.info("ferramenta %s %s", call.name, call.args)
+        if self.approve is not None and not self.approve(call):
+            result = ToolResult(call, "O utilizador não autorizou esta ação: não foi feita.", is_error=True)
+            log.info("  -> não autorizada")
+            if self.on_tool_result:
+                self.on_tool_result(result)
+            return result
         try:
             result = ToolResult(call, self.executor.run(call.name, call.args, request))
         except (MessagingError, ValueError, KeyError, OSError, PermissionError) as exc:
@@ -128,6 +138,11 @@ class Brain:
         return result
 
     def handle(self, text: str) -> str:
+        # Voz e Telegram usam cada um o seu Brain, mas nunca mexem no PC ao mesmo tempo.
+        with ACTION_LOCK:
+            return self._handle(text)
+
+    def _handle(self, text: str) -> str:
         """Processa um comando do utilizador e devolve a resposta final do Jarvis.
 
         Lança LLMError se o modelo falhar; nesse caso o turno é descartado do histórico.

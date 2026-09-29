@@ -82,3 +82,53 @@ def test_stop_key_ends_recording(fake_mic):
 def test_no_speech_returns_none(monkeypatch, fake_mic):
     fake_mic.data = (np.zeros(16000 * 3, dtype=np.int16)).tobytes()
     assert Recorder(None).record(wait_for_speech=2, end_silence=2) is None
+
+
+# --- "Hey Jarvis" (openWakeWord) ------------------------------------------------
+
+HEY_JARVIS = Path(__file__).parent / "fixtures" / "hey_jarvis.wav"
+
+
+def _feed(monkeypatch, path):
+    with wave.open(str(path)) as w:
+        stream = FakeStream(w.readframes(w.getnframes()))
+
+    class FakePyAudio:
+        def open(self, **kwargs):
+            return stream
+
+        def terminate(self):
+            pass
+
+    fake = type(sys)("pyaudio")
+    fake.PyAudio, fake.paInt16 = FakePyAudio, 8
+    monkeypatch.setitem(sys.modules, "pyaudio", fake)
+
+
+def test_wake_word_detected_in_recording(monkeypatch):
+    pytest.importorskip("openwakeword")
+    from jarvis.voice import WakeWord
+
+    try:
+        wake = WakeWord(0.3)
+    except Exception as exc:  # modelos não descarregados (sem internet)
+        pytest.skip(f"openWakeWord sem modelos: {exc}")
+    _feed(monkeypatch, HEY_JARVIS)
+    recorder = Recorder(None)
+    audio = recorder.record(wait_for_speech=5, end_silence=1.5, wake=wake)
+    assert recorder.wake_detected and recorder.wake_score > 0.9
+    assert audio is not None
+
+
+def test_no_wake_word_in_normal_speech(monkeypatch):
+    pytest.importorskip("openwakeword")
+    from jarvis.voice import WakeWord
+
+    try:
+        wake = WakeWord(0.3)
+    except Exception as exc:
+        pytest.skip(f"openWakeWord sem modelos: {exc}")
+    _feed(monkeypatch, FIXTURE)  # "Diz ao Rui..." / "Pesquisa o tempo..." sem "Jarvis"
+    recorder = Recorder(None)
+    recorder.record(wait_for_speech=5, end_silence=3.0, wake=wake)
+    assert not recorder.wake_detected and recorder.wake_score < 0.1

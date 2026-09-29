@@ -55,6 +55,7 @@ def _load_voice(ui: UI):
             whisper_device=config.whisper_device,
             tts_voice=config.tts_voice,
             tts_engine=config.tts_engine,
+            wake_threshold=config.wake_threshold or None,
             voice_style=config.voice_style,
             end_silence=config.end_silence,
             manual_silence=config.manual_silence,
@@ -65,7 +66,25 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Jarvis — assistente pessoal para o PC.")
     parser.add_argument("--modo", choices=[m[0] for m in MODES.values()], help="modo de interação")
     parser.add_argument("--voz", action="store_true", help="atalho para --modo maos-livres")
+    parser.add_argument("--testar-jarvis", action="store_true", help="testa a deteção do 'Hey Jarvis'")
+    parser.add_argument("--telegram", action="store_true", help="liga o Jarvis ao teu bot do Telegram")
+    parser.add_argument("--servico", action="store_true", help="só o Telegram, em segundo plano")
     args = parser.parse_args(argv)
+
+    if args.telegram:
+        from jarvis.telegram_setup import run as setup_telegram
+
+        return setup_telegram()
+    if args.servico:
+        setup_log()
+        from jarvis.remote import run_service
+
+        return run_service()
+
+    if args.testar_jarvis:
+        from jarvis.wake_test import run as test_wake
+
+        return test_wake()
 
     # A consola do Windows nem sempre usa UTF-8 (acentos saem como "�").
     for stream in (sys.stdin, sys.stdout):
@@ -117,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         ui.info("Envio cancelado.")
         return None
 
-    def listen(hint: str, manual: bool = False, wait: float | None = 30, show: bool = True) -> str | None:
+    def listen(hint: str, manual: bool = False, wait: float | None = 30, show: bool = True,
+               hands_free: bool = False) -> str | None:
         """Grava (com indicador ao vivo) e transcreve."""
         nonlocal mode
         stop_hint = " · Enter para terminar" if manual else ""
@@ -129,7 +149,8 @@ def main(argv: list[str] | None = None) -> int:
 
         try:
             with ui.status(f"🎤 {hint}"):
-                audio = voice.record(manual=manual, on_progress=progress, wait_for_speech=wait)
+                audio = voice.record(manual=manual, on_progress=progress, wait_for_speech=wait,
+                                     hands_free=hands_free)
                 if audio is None:
                     return None
                 ui.update_status("A transcrever…")
@@ -149,10 +170,15 @@ def main(argv: list[str] | None = None) -> int:
         """No mãos-livres só reage a frases começadas por "Jarvis", exceto logo a seguir a responder."""
         nonlocal awake_until
         awake = time.monotonic() < awake_until
-        text = listen("À escuta… diz “Jarvis, …”" if not awake else "À escuta… podes continuar")
+        text = listen("À escuta… diz “Hey Jarvis, …”" if not awake else "À escuta… podes continuar",
+                      hands_free=True)
         if not text:
             return None
         command = strip_wake_word(text)
+        if command is None and voice.wake_detected:
+            # O openWakeWord ouviu "Hey Jarvis" mas o Whisper escreveu-o de outra forma
+            # ("Ei, Travis..."): o pedido é a frase toda.
+            command = text
         if command is None:
             return text if awake else None
         if not command:  # só "Jarvis"
@@ -177,6 +203,16 @@ def main(argv: list[str] | None = None) -> int:
     except LLMError as exc:
         ui.error(str(exc))
         return 1
+
+    # Telegram: se estiver configurado e nenhum serviço em segundo plano o estiver a ler.
+    from jarvis.remote import TelegramController, claim_bot, telegram_configured
+
+    if telegram_configured():
+        if claim_bot():
+            TelegramController(ui=ui).start_background()
+            ui.info("📱 Telegram ligado: podes mandar pedidos pelo teu bot.")
+        else:
+            ui.info("📱 O serviço do Telegram já está a correr em segundo plano.")
 
     # Carrega o modelo e a lista de apps em segundo plano, para o 1.º pedido ser rápido.
     threading.Thread(target=lambda: (brain.llm.warmup(), list_start_apps()), daemon=True).start()

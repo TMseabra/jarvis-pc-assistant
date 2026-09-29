@@ -51,6 +51,8 @@ class Config:
     # (onde também podes carregar em Enter para terminar logo).
     end_silence: float = field(default_factory=lambda: _float_env("JARVIS_END_SILENCE", 3.0))
     manual_silence: float = field(default_factory=lambda: _float_env("JARVIS_MANUAL_SILENCE", 15.0))
+    # Mãos-livres: sensibilidade do "Hey Jarvis" (openWakeWord), 0-1; 0 desliga.
+    wake_threshold: float = field(default_factory=lambda: _float_env("JARVIS_WAKE_THRESHOLD", 0.3))
     # "edge" = voz neural portuguesa (online); "sapi" = vozes do Windows (offline).
     tts_engine: str = field(default_factory=lambda: _env("JARVIS_TTS", "edge"))
     tts_voice: str = field(default_factory=lambda: _env("JARVIS_TTS_VOICE", "pt-PT-DuarteNeural"))
@@ -62,6 +64,9 @@ class Config:
     # WhatsApp/Discord: "auto" usa a app de desktop se estiver instalada, senão a versão web;
     # "desktop" ou "web" forçam uma delas. (O Telegram usa sempre a versão web.)
     messaging: str = field(default_factory=lambda: _env("JARVIS_MESSAGING", "auto").lower())
+    # Telegram: token do bot (@BotFather) e IDs de utilizador autorizados (separados por vírgulas).
+    telegram_token: str = field(default_factory=lambda: os.getenv("JARVIS_TELEGRAM_TOKEN", ""))
+    telegram_allowed_ids: str = field(default_factory=lambda: os.getenv("JARVIS_TELEGRAM_ALLOWED_IDS", ""))
     # Opcional: Client ID de uma app em developer.spotify.com, para tocar música pelo nome.
     spotify_client_id: str = field(default_factory=lambda: os.getenv("JARVIS_SPOTIFY_CLIENT_ID", ""))
     # Pastas com projetos de código, separadas por ";" (vazio = pastas habituais do GitHub).
