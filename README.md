@@ -1,36 +1,38 @@
 # Jarvis PC Assistant
 
-**Assistente pessoal para o PC.** Controla o computador por voz ou texto — abre aplicações e sites, e entra em conversas no WhatsApp, Telegram e Discord pelo browser para ler e responder a mensagens.
+**Personal assistant for your PC.** Control your computer by voice or text — open apps and websites, and step into WhatsApp, Telegram and Discord conversations through the browser to read and reply to messages.
 
 ## Stack
 
 - Python
-- LLM com tool calling para interpretar linguagem natural: **Ollama** (local, grátis) ou **Gemini** (API)
-- Playwright (automação do browser para WhatsApp Web / Telegram Web / Discord)
-- faster-whisper (reconhecimento de voz local) + edge-tts (voz neural portuguesa)
-- rich (interface de terminal)
+- LLM with tool calling to interpret natural language: **Ollama** (local, free) or **Gemini** (API)
+- Playwright (browser automation for WhatsApp Web / Telegram Web / Discord)
+- faster-whisper (local speech recognition) + edge-tts (Portuguese neural voice)
+- rich (terminal UI)
 
 ## Features
 
-- Abrir aplicações do PC por nome ("abre o Spotify")
-- Abrir sites no browser ("abre o YouTube")
-- Pesquisar na web
-- Entrar numa conversa (WhatsApp, Telegram ou Discord) e ler as últimas mensagens
-- Responder a uma pessoa específica numa conversa
-- Comandos por voz ou por texto
+- Open PC applications by name (`"abre o Spotify"` — "open Spotify")
+- Open websites in the browser (`"abre o YouTube"` — "open YouTube")
+- Search the web
+- Enter a conversation (WhatsApp, Telegram or Discord) and read the latest messages
+- Reply to a specific person in a conversation
+- Voice or text commands
+
+> **Note:** Jarvis is designed for European Portuguese (pt-PT). Voice commands and spoken replies are in Portuguese; example commands below are shown in Portuguese with an English translation.
 
 ## What this project demonstrates
 
-Integração com LLMs (locais e na cloud) através de uma interface comum para interpretar linguagem natural, automação de browser (Playwright) e automação do sistema operativo
+Integration with LLMs (local and cloud) through a common interface to interpret natural language, browser automation (Playwright) and operating system automation.
 
 ## Development roadmap
 
 1. Idea
 2. Planning
-3. Definir esquema de comandos (NLU) e ações suportadas
-4. Automação de apps/sites
-5. Automação de browser (WhatsApp / Telegram / Discord)
-6. Voz (input e output)
+3. Define the command schema (NLU) and supported actions
+4. App/website automation
+5. Browser automation (WhatsApp / Telegram / Discord)
+6. Voice (input and output)
 7. Git / Branches
 8. Testing
 9. README
@@ -39,125 +41,125 @@ Integração com LLMs (locais e na cloud) através de uma interface comum para i
 
 ## Running locally
 
-Prerequisites: Python 3.11+ e **um** destes:
+Prerequisites: Python 3.11+ and **one** of these:
 
-- **Ollama** (predefinição): instala em https://ollama.com e corre `ollama pull qwen2.5:7b` (≈4.7 GB). Nos testes escolheu a ferramenta certa em 24/24 pedidos, em ~1 s cada, e fala português de Portugal. O `qwen2.5-coder` também funciona, mas responde em português do Brasil (define `JARVIS_OLLAMA_MODEL=qwen2.5-coder`).
-- **Gemini**: cria uma chave grátis em https://aistudio.google.com/apikey e define `JARVIS_PROVIDER=gemini` e `GEMINI_API_KEY=...` (num ficheiro `.env`, ver `.env.example`).
+- **Ollama** (default): install from https://ollama.com and run `ollama pull qwen2.5:7b` (≈4.7 GB). In tests it picked the right tool in 24/24 requests, in ~1 s each, and speaks European Portuguese. `qwen2.5-coder` also works, but replies in Brazilian Portuguese (set `JARVIS_OLLAMA_MODEL=qwen2.5-coder`).
+- **Gemini**: create a free key at https://aistudio.google.com/apikey and set `JARVIS_PROVIDER=gemini` and `GEMINI_API_KEY=...` (in a `.env` file, see `.env.example`).
 
-### Ollama ou Gemini?
+### Ollama or Gemini?
 
-| | Ollama (local) | Gemini (plano gratuito) |
+| | Ollama (local) | Gemini (free tier) |
 |---|---|---|
-| Qualidade (escolher ações, português de Portugal, resumos) | Razoável com modelos de 7B | Bastante melhor |
-| Privacidade | Tudo fica no PC | As mensagens lidas vão para a Google, e no plano gratuito a Google pode usá-las para melhorar os produtos |
-| Custo e limites | Grátis, sem limites | Grátis, mas com limite de pedidos por dia |
-| Internet | Não precisa | Precisa |
-| Requisitos | Bom PC (≈5 GB de RAM/VRAM para um modelo de 7B) | Nenhum |
+| Quality (choosing actions, European Portuguese, summaries) | Decent with 7B models | Much better |
+| Privacy | Everything stays on your PC | Messages you read are sent to Google, and on the free tier Google may use them to improve its products |
+| Cost and limits | Free, no limits | Free, but with a daily request limit |
+| Internet | Not required | Required |
+| Requirements | A good PC (≈5 GB of RAM/VRAM for a 7B model) | None |
 
-### Instalar e abrir (Windows)
+### Install and launch (Windows)
 
-1. Faz duplo clique em **`install.bat`**. Cria o ambiente Python, instala tudo, descarrega o browser e o modelo do Ollama, e põe um atalho **Jarvis** no ambiente de trabalho.
-2. Abre o Jarvis pelo atalho, ou com duplo clique em **`Jarvis.bat`**.
-3. Escolhe o modo:
-   - **Escrever**: escreves os pedidos.
-   - **Falar**: carregas em Enter, falas o tempo que quiseres (com pausas) e carregas em Enter outra vez para terminar. Se te esqueceres, para sozinho após 15 s de silêncio. O Jarvis responde em voz alta.
-   - **Mãos-livres**: está sempre a ouvir, mas só reage a frases começadas por **“Jarvis, …”**. A gravação só acaba com 3 s de silêncio. Durante 8 s depois de responder podes continuar sem repetir o nome. “Jarvis, sair” termina.
+1. Double-click **`install.bat`**. It creates the Python environment, installs everything, downloads the browser and the Ollama model, and puts a **Jarvis** shortcut on your desktop.
+2. Launch Jarvis from the shortcut, or double-click **`Jarvis.bat`**.
+3. Choose a mode:
+   - **Type**: you type your requests.
+   - **Speak**: press Enter, talk for as long as you like (pauses are fine) and press Enter again to finish. If you forget, it stops on its own after 15 s of silence. Jarvis answers out loud.
+   - **Hands-free**: always listening, but only reacts to phrases starting with **"Jarvis, …"**. Recording only ends after 3 s of silence. For 8 s after answering you can keep talking without repeating the name. "Jarvis, sair" (quit) exits.
 
-Pela linha de comandos: `.venv\Scripts\python -m jarvis.main --modo texto|falar|maos-livres`.
+From the command line: `.venv\Scripts\python -m jarvis.main --modo texto|falar|maos-livres` (text | speak | hands-free).
 
-### Música, vídeos e contactos
+### Music, videos and contacts
 
-- **YouTube:** "põe um vídeo sobre…" / "mete no YouTube…" pesquisa no YouTube e abre logo o primeiro vídeo (no browser escolhido).
-- **Spotify:** "põe a minha música", "pausa", "próxima", "anterior" funcionam sem configuração (teclas multimédia). O Jarvis confirma pelo título da janela do Spotify que a música começou mesmo.
-- **Spotify pelo nome** ("toca Bohemian Rhapsody", "põe a playlist de treino"): precisa da API do Spotify (Premium). Uma vez: em https://developer.spotify.com/dashboard cria uma app com o Redirect URI `http://127.0.0.1:8888/callback` (Web API), copia o **Client ID** para o `.env` como `JARVIS_SPOTIFY_CLIENT_ID=...` e, no primeiro pedido, autoriza no browser. Sem isto, o Jarvis abre a pesquisa no Spotify e diz que não conseguiu pôr a tocar.
-- **Contactos:** em `contactos.txt` (criado automaticamente, fora do git) escreve uma pessoa por linha, `Nome como aparece = formas como o dizes` (ex.: `Rafosto = rafa, rafael`). O Whisper passa a reconhecer esses nomes e o Jarvis traduz o que disseste para o nome certo. Nomes parecidos ("Rafosta") também são encontrados, e a confirmação mostra sempre o nome real antes de enviar.
-- **Claudinho:** "abre o Claudinho" abre o Claude na web; "diz ao Claudinho para continuar no TaskFlow" abre o projeto e passa o pedido ao Claude Code.
-- **Registo:** `.jarvis/jarvis.log` guarda o que foi ouvido, as ações e os erros (só no teu PC), para perceber o que falhou.
+- **YouTube:** `"põe um vídeo sobre…"` / `"mete no YouTube…"` ("play a video about…") searches YouTube and immediately opens the first video (in the chosen browser).
+- **Spotify:** `"põe a minha música"` (play my music), `"pausa"` (pause), `"próxima"` (next), `"anterior"` (previous) work without any setup (media keys). Jarvis checks the Spotify window title to confirm the music really started.
+- **Spotify by name** (`"toca Bohemian Rhapsody"`, `"põe a playlist de treino"` — "play my workout playlist"): requires the Spotify API (Premium). One-time setup: at https://developer.spotify.com/dashboard create an app with the Redirect URI `http://127.0.0.1:8888/callback` (Web API), copy the **Client ID** into `.env` as `JARVIS_SPOTIFY_CLIENT_ID=...` and authorize in the browser on your first request. Without this, Jarvis opens the Spotify search and says it couldn't start playback.
+- **Contacts:** in `contactos.txt` (created automatically, git-ignored) write one person per line, `Name as it appears = ways you say it` (e.g. `Rafosto = rafa, rafael`). Whisper will then recognize those names and Jarvis maps what you said to the right name. Similar names ("Rafosta") are also matched, and the confirmation always shows the real name before sending.
+- **Claudinho:** `"abre o Claudinho"` opens Claude on the web; `"diz ao Claudinho para continuar no TaskFlow"` ("tell Claudinho to continue on TaskFlow") opens the project and passes the request to Claude Code.
+- **Log:** `.jarvis/jarvis.log` records what was heard, the actions and the errors (only on your PC), so you can work out what went wrong.
 
-### Voz
+### Voice
 
-- **Gravação:** deteção de voz (Silero VAD), não o volume. O ruído de fundo (ventoinhas, jogo) não conta como fala e as pausas não cortam a frase.
-- **Reconhecimento:** Whisper `large-v3-turbo`, a correr localmente. Na GPU NVIDIA demora ~0.5 s por frase; sem GPU passa sozinho para o `small` no CPU. Na primeira vez descarrega o modelo (~1.6 GB).
-- **Microfone:** escolhe automaticamente o primeiro que não seja virtual (ignora o Voicemod e o "Mapeador de sons", que alteram ou não captam a voz). Para escolher outro, define `JARVIS_MIC=HyperX` (qualquer parte do nome).
-- **Resposta falada:** voz neural portuguesa (Duarte ou Raquel) através do `edge-tts`. Precisa de internet, e o texto das respostas passa pelo serviço da Microsoft. Sem internet usa as vozes do Windows. Para ficar sempre offline define `JARVIS_TTS=sapi`.
+- **Recording:** voice activity detection (Silero VAD), not volume. Background noise (fans, games) doesn't count as speech and pauses don't cut off your sentence.
+- **Recognition:** Whisper `large-v3-turbo`, running locally. On an NVIDIA GPU it takes ~0.5 s per sentence; without a GPU it automatically falls back to `small` on the CPU. The model (~1.6 GB) is downloaded on first use.
+- **Microphone:** automatically picks the first non-virtual one (ignores Voicemod and the "Sound Mapper", which alter or don't capture your voice). To pick another, set `JARVIS_MIC=HyperX` (any part of the name).
+- **Spoken replies:** Portuguese neural voice (Duarte or Raquel) via `edge-tts`. Requires internet, and the reply text goes through Microsoft's service. Without internet it uses the Windows voices. To stay always offline set `JARVIS_TTS=sapi`.
 
-Exemplos de comandos:
+Example commands:
 
-- "abre o Spotify e a Steam" (vários pedidos na mesma frase são feitos um a um)
-- "abre o Valorant" / "abre o Overwatch" / "abre o Palworld" (abre o jogo diretamente: Riot, Battle.net, Steam e Epic)
-- "abre no VS Code o repositório TaskFlow e diz ao Claude para continuar"
-- "abre a calculadora" / "abre o WhatsApp" (qualquer app do Menu Iniciar, incluindo as da Microsoft Store, pelo nome em português)
-- "abre o YouTube"
-- "pesquisa o tempo em Lisboa"
-- "lê as últimas mensagens da Ana no WhatsApp"
-- "responde ao Rui no Discord a dizer que chego às 8"
+- `"abre o Spotify e a Steam"` — "open Spotify and Steam" (several requests in one sentence are handled one by one)
+- `"abre o Valorant"` / `"abre o Overwatch"` / `"abre o Palworld"` — opens the game directly (Riot, Battle.net, Steam and Epic)
+- `"abre no VS Code o repositório TaskFlow e diz ao Claude para continuar"` — "open the TaskFlow repository in VS Code and tell Claude to continue"
+- `"abre a calculadora"` / `"abre o WhatsApp"` — "open the calculator" / "open WhatsApp" (any Start Menu app, including Microsoft Store apps, by its Portuguese name)
+- `"abre o YouTube"` — "open YouTube"
+- `"pesquisa o tempo em Lisboa"` — "search the weather in Lisbon"
+- `"lê as últimas mensagens da Ana no WhatsApp"` — "read Ana's latest messages on WhatsApp"
+- `"responde ao Rui no Discord a dizer que chego às 8"` — "reply to Rui on Discord saying I'll arrive at 8"
 
-**WhatsApp e Discord** usam as apps de desktop se estiverem instaladas: o Jarvis abre a app, procura a pessoa e confirma pelo nome que a conversa aberta é a certa antes de enviar (se não conseguir confirmar, não envia). O **Telegram** (ou WhatsApp/Discord sem app instalada, ou com `JARVIS_MESSAGING=web`) usa a versão web: na primeira vez abre-se uma janela do Chromium para fazeres login (QR code), e a sessão fica guardada em `.jarvis/browser-profile`. Antes de enviar qualquer mensagem o Jarvis pede confirmação (desliga com `JARVIS_CONFIRM_SEND=0`). Escreve "esquece" para começar uma conversa nova e "sair" para terminar.
+**WhatsApp and Discord** use the desktop apps if installed: Jarvis opens the app, looks up the person and confirms by name that the open conversation is the right one before sending (if it can't confirm, it doesn't send). **Telegram** (or WhatsApp/Discord without the app installed, or with `JARVIS_MESSAGING=web`) uses the web version: the first time, a Chromium window opens for you to log in (QR code), and the session is saved in `.jarvis/browser-profile`. Before sending any message Jarvis asks for confirmation (turn off with `JARVIS_CONFIRM_SEND=0`). Say `"esquece"` (forget) to start a new conversation and `"sair"` (quit) to exit.
 
-## Configuração
+## Configuration
 
-| Variável | Predefinição | Descrição |
+| Variable | Default | Description |
 |---|---|---|
-| `JARVIS_PROVIDER` | `ollama` | `ollama` ou `gemini` |
-| `JARVIS_OLLAMA_MODEL` | `qwen2.5:7b` | Modelo do Ollama (tem de suportar tools) |
-| `OLLAMA_HOST` | `http://localhost:11434` | Servidor do Ollama |
-| `GEMINI_API_KEY` | — | Chave da API do Gemini |
-| `JARVIS_GEMINI_MODEL` | `gemini-3.8-flash` | Modelo do Gemini (tem plano gratuito) |
-| `JARVIS_MAX_TURNS` | 2 (Ollama) / 10 (Gemini) | Pedidos que o modelo recorda. Modelos locais pequenos ficam piores a chamar ferramentas com histórico longo |
-| `JARVIS_LANGUAGE` | `pt-PT` | Língua do reconhecimento e da voz |
-| `JARVIS_MIC` | automático | Parte do nome do microfone a usar |
-| `JARVIS_WHISPER_MODEL` | `large-v3-turbo` | Modelo do Whisper (`small`, `medium`, ...) |
-| `JARVIS_WHISPER_DEVICE` | `auto` | `cuda`, `cpu` ou `auto` |
-| `JARVIS_TTS` | `edge` | `edge` (voz neural, online) ou `sapi` (Windows, offline) |
-| `JARVIS_TTS_VOICE` | `pt-PT-DuarteNeural` | Ou `pt-PT-RaquelNeural` |
-| `JARVIS_END_SILENCE` | `3` | Mãos-livres: segundos de silêncio que terminam a gravação |
-| `JARVIS_MANUAL_SILENCE` | `15` | Modo Falar: segundos de silêncio que terminam a gravação (ou carrega em Enter) |
-| `JARVIS_BROWSER` | `default` | Browser para sites: `opera`, `chrome`, `firefox`, `brave`, `edge` ou caminho do .exe |
-| `JARVIS_MESSAGING` | `auto` | WhatsApp/Discord: `auto` (app de desktop se existir), `desktop` ou `web` |
-| `JARVIS_PROJECT_DIRS` | pastas GitHub | Onde procurar projetos para o VS Code (separadas por `;`) |
-| `JARVIS_BROWSER_PROFILE` | `.jarvis/browser-profile` | Perfil persistente do browser |
-| `JARVIS_CONFIRM_SEND` | `1` | Pedir confirmação antes de enviar mensagens |
+| `JARVIS_PROVIDER` | `ollama` | `ollama` or `gemini` |
+| `JARVIS_OLLAMA_MODEL` | `qwen2.5:7b` | Ollama model (must support tools) |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server |
+| `GEMINI_API_KEY` | — | Gemini API key |
+| `JARVIS_GEMINI_MODEL` | `gemini-3.8-flash` | Gemini model (has a free tier) |
+| `JARVIS_MAX_TURNS` | 2 (Ollama) / 10 (Gemini) | Number of requests the model remembers. Small local models get worse at calling tools with a long history |
+| `JARVIS_LANGUAGE` | `pt-PT` | Recognition and voice language |
+| `JARVIS_MIC` | automatic | Part of the name of the microphone to use |
+| `JARVIS_WHISPER_MODEL` | `large-v3-turbo` | Whisper model (`small`, `medium`, ...) |
+| `JARVIS_WHISPER_DEVICE` | `auto` | `cuda`, `cpu` or `auto` |
+| `JARVIS_TTS` | `edge` | `edge` (neural voice, online) or `sapi` (Windows, offline) |
+| `JARVIS_TTS_VOICE` | `pt-PT-DuarteNeural` | Or `pt-PT-RaquelNeural` |
+| `JARVIS_END_SILENCE` | `3` | Hands-free: seconds of silence that end the recording |
+| `JARVIS_MANUAL_SILENCE` | `15` | Speak mode: seconds of silence that end the recording (or press Enter) |
+| `JARVIS_BROWSER` | `default` | Browser for websites: `opera`, `chrome`, `firefox`, `brave`, `edge` or path to the .exe |
+| `JARVIS_MESSAGING` | `auto` | WhatsApp/Discord: `auto` (desktop app if present), `desktop` or `web` |
+| `JARVIS_PROJECT_DIRS` | GitHub folders | Where to look for projects for VS Code (separated by `;`) |
+| `JARVIS_BROWSER_PROFILE` | `.jarvis/browser-profile` | Persistent browser profile |
+| `JARVIS_CONFIRM_SEND` | `1` | Ask for confirmation before sending messages |
 
-## Segurança
+## Security
 
-- Quando ditas a mensagem ("diz à Ana que já vou", "responde-lhe que sim", `envia ao Rui "bom jogo"`), o texto enviado é tirado das tuas palavras e não do que o modelo escreve, que tende a reescrever e acrescentar frases.
-- Antes de enviar, o Jarvis abre a conversa e confirma que é a pessoa pedida ("Ana" abre "Ana Silva", mas nunca "Anabela"). Se não for, não envia.
-- Depois mostra o nome real da conversa e o texto exato e pede confirmação: `s` para enviar, `e` para corrigir o texto, qualquer outra tecla para cancelar. No modo mãos-livres a confirmação é por voz.
-- As mensagens lidas vão para o modelo marcadas como conteúdo de terceiros, para ele não seguir instruções escritas nelas.
-- `open_app` só aceita nomes de aplicações (sem caminhos nem caracteres de shell) e não passa pela shell; `open_website` só aceita http/https.
+- When you dictate the message (`"diz à Ana que já vou"` — "tell Ana I'm on my way", `"responde-lhe que sim"` — "reply yes to them", `envia ao Rui "bom jogo"` — "send Rui 'good game'"), the text sent is taken from your words and not from what the model writes, since it tends to rephrase and add sentences.
+- Before sending, Jarvis opens the conversation and confirms it is the requested person ("Ana" opens "Ana Silva", but never "Anabela"). If not, it doesn't send.
+- It then shows the real conversation name and the exact text and asks for confirmation: `s` (sim) to send, `e` (editar) to edit the text, any other key to cancel. In hands-free mode confirmation is by voice.
+- Messages that are read are passed to the model marked as third-party content, so it doesn't follow instructions written in them.
+- `open_app` only accepts application names (no paths or shell characters) and doesn't go through the shell; `open_website` only accepts http/https.
 
-## Fiabilidade com modelos locais
+## Reliability with local models
 
-Modelos de 7B às vezes respondem "abri o Spotify" sem chamar a ferramenta, sobretudo quando o mesmo pedido já está no histórico. O Jarvis deteta pedidos de ação ("abre…", "pesquisa…", "lê…", "diz à Ana que…") sem nenhuma ferramenta chamada e tenta outra vez só com o pedido atual. Se mesmo assim nada for feito, diz que não conseguiu, em vez de mostrar a resposta falsa. Com o `qwen2.5:7b`: 72/72 ações certas em três execuções (antes: 13–17/24 quando os pedidos se repetiam).
+7B models sometimes answer "I opened Spotify" without calling the tool, especially when the same request is already in the history. Jarvis detects action requests (`"abre…"`, `"pesquisa…"`, `"lê…"`, `"diz à Ana que…"`) with no tool called and retries with only the current request. If nothing gets done anyway, it says it couldn't, instead of showing the false answer. With `qwen2.5:7b`: 72/72 correct actions across three runs (before: 13–17/24 when requests repeated).
 
-O contexto do Ollama está a 8192 tokens (o predefinido, 4096, enchia com mensagens lidas e cortava as instruções) e o modelo fica carregado 30 min entre pedidos.
+Ollama's context is set to 8192 tokens (the default, 4096, filled up with read messages and cut off the instructions) and the model stays loaded for 30 min between requests.
 
-## Estrutura
+## Project structure
 
 ```
 jarvis/
-  main.py              # loop de texto/voz
-  brain.py             # loop: o modelo escolhe ferramentas, o Jarvis executa-as
-  tools.py             # definição das ferramentas + execução (e confirmação de envio)
+  main.py              # text/voice loop
+  brain.py             # loop: the model picks tools, Jarvis runs them
+  tools.py             # tool definitions + execution (and send confirmation)
   llm/
-    base.py            # interface comum aos providers
-    ollama_provider.py # Ollama (inclui parser para modelos que escrevem tool calls como texto)
+    base.py            # common interface for providers
+    ollama_provider.py # Ollama (includes a parser for models that write tool calls as text)
     gemini_provider.py # Gemini (google-genai)
-  voice.py             # microfone + Whisper (entrada), edge-tts (saída)
-  ui.py                # interface de terminal (rich)
-  commands.py          # divide "abre X e Y e manda..." em pedidos simples
-  config.py            # variáveis de ambiente
+  voice.py             # microphone + Whisper (input), edge-tts (output)
+  ui.py                # terminal UI (rich)
+  commands.py          # splits "open X and Y and send..." into simple requests
+  config.py            # environment variables
   actions/
-    system.py          # abrir apps, sites e pesquisas
-    messaging.py       # Playwright: WhatsApp Web, Telegram Web, Discord (versão web)
-    desktop_chat.py    # WhatsApp e Discord de desktop (UI Automation)
-    games.py           # jogos da Steam, Epic, Riot e Battle.net
-    projects.py        # projetos no VS Code + Claude Code
-Jarvis.bat             # duplo clique para abrir
-install.bat            # instalação + atalho no ambiente de trabalho
+    system.py          # open apps, websites and searches
+    messaging.py       # Playwright: WhatsApp Web, Telegram Web, Discord (web version)
+    desktop_chat.py    # desktop WhatsApp and Discord (UI Automation)
+    games.py           # games from Steam, Epic, Riot and Battle.net
+    projects.py        # projects in VS Code + Claude Code
+Jarvis.bat             # double-click to launch
+install.bat            # installation + desktop shortcut
 scripts/create_shortcut.ps1
 assets/jarvis.ico
-tests/                 # pytest; test_messaging_browser.py usa uma página local que imita o WhatsApp
+tests/                 # pytest; test_messaging_browser.py uses a local page that mimics WhatsApp
 ```
 
 ## Testing
@@ -166,4 +168,8 @@ tests/                 # pytest; test_messaging_browser.py usa uma página local
 pytest
 ```
 
-> Os seletores CSS do WhatsApp/Telegram/Discord estão todos em `PLATFORMS` (`jarvis/actions/messaging.py`). Estes sites mudam o HTML com frequência; se a leitura ou o envio deixarem de funcionar, é aí que se atualizam.
+> The CSS selectors for WhatsApp/Telegram/Discord are all in `PLATFORMS` (`jarvis/actions/messaging.py`). These sites change their HTML frequently; if reading or sending stops working, that's where to update them.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
