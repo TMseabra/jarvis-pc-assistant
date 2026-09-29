@@ -191,3 +191,42 @@ def test_continue_work_passes_context_to_claude(tmp_path, monkeypatch):
     projects.continue_work()
     name, prompt, project = calls[0]
     assert project == repo and "Continua o trabalho" in prompt and "dashboard" in prompt
+
+
+# --- histórico do YouTube ---------------------------------------------------------
+
+def _history_db(path, visits):
+    import sqlite3
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE urls (id INTEGER PRIMARY KEY, url TEXT, title TEXT)")
+    con.execute("CREATE TABLE visits (id INTEGER PRIMARY KEY, url INTEGER, visit_time INTEGER, visit_duration INTEGER)")
+    for i, (vid, title, minutes_ago, seconds) in enumerate(visits, 1):
+        con.execute("INSERT INTO urls VALUES (?, ?, ?)", (i, f"https://www.youtube.com/watch?v={vid}", f"{title} - YouTube"))
+        when = int((media._CHROMIUM_EPOCH.__class__.now() - media._CHROMIUM_EPOCH).total_seconds() * 1e6) - minutes_ago * 60_000_000
+        con.execute("INSERT INTO visits VALUES (?, ?, ?, ?)", (i, i, when, seconds * 1_000_000))
+    con.commit(); con.close()
+
+
+def test_watched_videos_order_and_filters(tmp_path, monkeypatch):
+    db = tmp_path / "History"
+    _history_db(db, [
+        ("AAAAAAAAAAA", "Vídeo antigo", 120, 300),
+        ("BBBBBBBBBBB", "O que eu vi", 10, 600),
+        ("CCCCCCCCCCC", "Clique por engano", 5, 2),       # < 10 s: não conta
+        ("DDDDDDDDDDD", "Aberto pelo Jarvis", 1, 400),    # aberto pelo Jarvis: não conta
+    ])
+    monkeypatch.setattr(media, "_opened_by_jarvis", lambda: {"DDDDDDDDDDD"})
+    videos = media.watched_videos([db])
+    assert [v[1] for v in videos] == ["O que eu vi", "Vídeo antigo"]
+
+
+def test_open_watched_video(tmp_path, monkeypatch):
+    db = tmp_path / "History"
+    _history_db(db, [("AAAAAAAAAAA", "Antigo", 60, 100), ("BBBBBBBBBBB", "Recente", 5, 100)])
+    monkeypatch.setattr(media, "history_files", lambda: [db])
+    monkeypatch.setattr(media, "_opened_by_jarvis", lambda: set())
+    opened = []
+    monkeypatch.setattr(media, "open_url", opened.append)
+    assert "Recente" in media.open_watched_video(1)
+    assert "Antigo" in media.open_watched_video(2)
+    assert opened == ["https://www.youtube.com/watch?v=BBBBBBBBBBB", "https://www.youtube.com/watch?v=AAAAAAAAAAA"]

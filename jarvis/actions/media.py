@@ -11,6 +11,9 @@ import os
 import re
 import ssl
 import time
+import uuid
+from datetime import datetime, timedelta
+from pathlib import Path
 import urllib.parse
 import urllib.request
 
@@ -62,8 +65,99 @@ def play_youtube(query: str) -> str:
         open_url(results)
         return f"Abri os resultados do YouTube para '{query}' (não consegui escolher um vídeo sozinho)."
     video_id, title = video
+    _remember_opened(video_id)  # para não contar como "o último vídeo que viste"
     open_url(f"https://www.youtube.com/watch?v={video_id}")
     return f"Pus a tocar no YouTube: \"{title}\"."
+
+
+# --- histórico do YouTube (o que TU viste) -----------------------------------
+
+_OPENED_BY_JARVIS = Path(__file__).resolve().parents[2] / ".jarvis" / "videos_abertos_pelo_jarvis.txt"
+_CHROMIUM_EPOCH = datetime(1601, 1, 1)
+_VIDEO_ID = re.compile(r"(?:watch\?v=|/shorts/)([\w-]{11})")
+
+
+def _remember_opened(video_id: str):
+    try:
+        _OPENED_BY_JARVIS.parent.mkdir(parents=True, exist_ok=True)
+        with _OPENED_BY_JARVIS.open("a", encoding="utf-8") as f:
+            f.write(video_id + "\n")
+    except OSError:
+        pass
+
+
+def _opened_by_jarvis() -> set[str]:
+    try:
+        return set(_OPENED_BY_JARVIS.read_text(encoding="utf-8").split())
+    except OSError:
+        return set()
+
+
+def history_files() -> list[Path]:
+    """Ficheiros de histórico dos browsers (Chromium): o browser escolhido primeiro."""
+    appdata, local = Path(os.environ.get("APPDATA", "")), Path(os.environ.get("LOCALAPPDATA", ""))
+    by_browser = {
+        "opera": [appdata / "Opera Software/Opera Stable/Default/History", appdata / "Opera Software/Opera Stable/History"],
+        "opera gx": [appdata / "Opera Software/Opera GX Stable/Default/History",
+                     appdata / "Opera Software/Opera GX Stable/History"],
+        "chrome": [local / "Google/Chrome/User Data/Default/History"],
+        "brave": [local / "BraveSoftware/Brave-Browser/User Data/Default/History"],
+        "edge": [local / "Microsoft/Edge/User Data/Default/History"],
+    }
+    from jarvis.config import config
+
+    order = [config.browser.lower()] + [b for b in by_browser if b != config.browser.lower()]
+    return [p for b in order for p in by_browser.get(b, []) if p.exists()]
+
+
+def watched_videos(files: list[Path] | None = None, min_seconds: float = 10, limit: int = 20):
+    """Vídeos do YouTube que viste, do mais recente para o mais antigo: [(id, título, quando)].
+    Ignora os que o Jarvis abriu e visitas com menos de `min_seconds` (cliques por engano)."""
+    import shutil
+    import sqlite3
+    import tempfile
+
+    skip = _opened_by_jarvis()
+    visits = []
+    for history in files if files is not None else history_files():
+        copy = Path(tempfile.gettempdir()) / f"jarvis_history_{uuid.uuid4().hex}.sqlite"
+        try:
+            shutil.copy2(history, copy)  # o browser tem o ficheiro bloqueado: lemos uma cópia
+            con = sqlite3.connect(copy)
+            rows = con.execute(
+                """SELECT u.url, u.title, v.visit_time, v.visit_duration FROM visits v JOIN urls u ON u.id = v.url
+                   WHERE u.url LIKE 'https://www.youtube.com/watch?v=%' OR u.url LIKE 'https://www.youtube.com/shorts/%'
+                   ORDER BY v.visit_time DESC LIMIT 400"""
+            ).fetchall()
+            con.close()
+        except (OSError, sqlite3.Error):
+            continue
+        finally:
+            copy.unlink(missing_ok=True)
+        for url, title, when, duration in rows:
+            m = _VIDEO_ID.search(url)
+            if m and m.group(1) not in skip and duration / 1e6 >= min_seconds:
+                clean = re.sub(r"^\(\d+\)\s*|\s*-\s*YouTube$", "", title or "").strip()
+                visits.append((m.group(1), clean, _CHROMIUM_EPOCH + timedelta(microseconds=when)))
+    visits.sort(key=lambda v: v[2], reverse=True)
+    seen, out = set(), []
+    for video in visits:
+        if video[0] not in seen:
+            seen.add(video[0])
+            out.append(video)
+    return out[:limit]
+
+
+def open_watched_video(position: int = 1) -> str:
+    """Abre o último (ou o penúltimo, ...) vídeo do YouTube que viste."""
+    videos = watched_videos()
+    if not videos:
+        return "Não encontrei vídeos do YouTube no teu histórico do browser."
+    position = max(1, min(int(position or 1), len(videos)))
+    video_id, title, when = videos[position - 1]
+    open_url(f"https://www.youtube.com/watch?v={video_id}")
+    which = "o último vídeo que viste" if position == 1 else f"o {position}.º vídeo mais recente que viste"
+    return f"Abri {which}: \"{title}\" (visto a {when:%d/%m às %H:%M})."
 
 
 def search_tiktok(query: str) -> str:

@@ -51,6 +51,19 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "open_watched_video",
+        "description": (
+            "Abre um vídeo do histórico do YouTube do utilizador (o que ELE viu): position 1 = o último "
+            "vídeo que viu, 2 = o penúltimo. Usa para 'abre o meu último vídeo', 'o vídeo que estava a ver', "
+            "'volta ao vídeo de há bocado'. Não pesquises com essas palavras."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"position": {"type": "integer", "description": "1 = o último visto (predefinição)."}},
+            "required": [],
+        },
+    },
+    {
         "name": "music",
         "description": (
             "Controla a música no Spotify: action 'play' (põe a tocar; com query toca essa música/artista/"
@@ -292,6 +305,12 @@ class ToolExecutor:
             if str(args.get("site") or "").lower() == "tiktok":
                 return media.search_tiktok(query)
             return media.play_youtube(query)
+        if name == "open_watched_video":
+            try:
+                position = int(args.get("position") or 1)
+            except (TypeError, ValueError):
+                position = 1
+            return media.open_watched_video(position)
         if name == "music":
             (action,) = _require(args, "action")
             return media.music(action, str(args.get("query") or ""))

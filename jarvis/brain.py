@@ -22,6 +22,7 @@ Usa as ferramentas para executar o que o utilizador pede:
 Claude na web); "diz ao Claudinho para..." num projeto é o claude_prompt do open_project;
 - vídeos: play_video (entra no YouTube, ou no TikTok se ele disser TikTok, e pesquisa lá o vídeo) \
 — nunca web_search para vídeos;
+- o último vídeo do YouTube que ELE viu (histórico): open_watched_video;
 - música no Spotify: music (play/pause/next/previous);
 - continuar o trabalho de programação onde ficou (continue_work);
 - criar imagens, código ou textos com uma IA na web: ask_ai (imagens -> ChatGPT, código -> Claude);
