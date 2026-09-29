@@ -205,6 +205,12 @@ class Api:
     def answer(self, key: str, text: str):
         self._ui.answer(key, text)
 
+    def fullscreen(self):
+        self._ui.window.toggle_fullscreen()
+
+    def close(self):
+        self._ui.window.destroy()
+
     def open_link(self, url: str):
         from jarvis.actions.system import open_url
 
@@ -219,7 +225,7 @@ def run_gui(session) -> int:
     api = Api(ui)
     ui.window = webview.create_window(
         "J.A.R.V.I.S.", str(PAGE), js_api=api, width=1280, height=800, min_size=(900, 600),
-        background_color="#02070d", text_select=True,
+        background_color="#02070d", text_select=True, maximized=True,
     )
     result = {"code": 0}
 
