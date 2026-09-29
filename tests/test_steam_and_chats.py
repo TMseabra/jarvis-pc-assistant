@@ -90,7 +90,7 @@ def test_play_roblox_with_just_roblox_opens_the_app(monkeypatch):
     monkeypatch.setattr(system, "open_app", lambda name: opened.append(name) or "Abri Roblox.")
     monkeypatch.setattr(roblox, "play", lambda game: (_ for _ in ()).throw(AssertionError("não devia pesquisar")))
     assert ToolExecutor().run("play_roblox", {"game": "Roblox"}) == "Abri Roblox."
-    assert opened == ["Roblox"]
+    assert opened == ["Roblox Player"]
 
 
 def test_recent_chats_and_pick(tmp_path):
@@ -121,3 +121,16 @@ def test_list_and_open_chat(monkeypatch):
     assert "1. Bug no TaskFlow" in listing and "2. Receita" in listing and "Queres abrir" in listing
     assert ai_web.open_chat("claude", "2") == 'Abri a conversa "Receita" no Claude.'
     assert opened == ["https://claude.ai/chat/b"]
+
+
+def test_game_without_roblox_in_request_opens_pc_game(monkeypatch):
+    from jarvis.actions import system
+    from jarvis.tools import ToolExecutor
+
+    opened = []
+    monkeypatch.setattr(system, "open_app", lambda name: opened.append(name) or f"Abri {name}.")
+    monkeypatch.setattr(roblox, "play", lambda game: f"Entrei no jogo {game} no Roblox.")
+    executor = ToolExecutor()
+    assert executor.run("play_roblox", {"game": "Palworld"}, "abre o jogo palworld") == "Abri Palworld."
+    assert "Roblox" in executor.run("play_roblox", {"game": "Greenville"}, "abre o jogo greenville no roblox")
+    assert opened == ["Palworld"]

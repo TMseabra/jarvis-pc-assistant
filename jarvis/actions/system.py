@@ -100,6 +100,7 @@ _APP_ALIASES = {
     "definicoes": "Definições",
     "whatsappweb": "WhatsApp",
     "wpp": "WhatsApp",
+    "roblox": "Roblox Player",
     "claudeapp": "Claude",
     "claudeinstalado": "Claude",
     "appdoclaude": "Claude",

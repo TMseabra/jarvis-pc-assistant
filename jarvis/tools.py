@@ -179,9 +179,9 @@ TOOL_SPECS = [
     {
         "name": "play_roblox",
         "description": (
-            "Entra num jogo (experiência) do Roblox pelo nome: pesquisa no Roblox e abre o jogo diretamente. "
-            "Usa para 'abre o jogo Greenville no Roblox', 'entra no Brookhaven', 'joga Blox Fruits'. Para abrir "
-            "só a app do Roblox usa open_app('Roblox')."
+            "Entra num jogo (experiência) DENTRO do Roblox: só quando o utilizador disser 'no Roblox' "
+            "('abre o jogo Greenville no Roblox'). 'Abre o jogo X' sem dizer Roblox é um jogo do PC: usa "
+            "open_app. Para abrir só a app do Roblox usa open_app('Roblox Player')."
         ),
         "parameters": {
             "type": "object",
@@ -476,7 +476,10 @@ class ToolExecutor:
         if name == "play_roblox":
             (game,) = _require(args, "game")
             if game.strip().lower() in ("roblox", "o roblox", "roblox player", "app do roblox"):
-                return system.open_app("Roblox")  # "abre o Roblox": só a app, sem entrar num jogo
+                return system.open_app("Roblox Player")  # "abre o Roblox": só a app, sem entrar num jogo
+            if request and "roblox" not in request.lower():
+                # "abre o jogo X" sem dizer Roblox é um jogo do PC (Steam, Riot, ...), não do Roblox.
+                return system.open_app(game)
             return roblox.play(game)
         if name == "screenshot":
             try:
