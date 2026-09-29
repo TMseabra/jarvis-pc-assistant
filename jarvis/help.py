@@ -13,7 +13,7 @@ HELP_TEXT = """Olá, sou o Jarvis. Isto é o que sei fazer:
 🔗 "mostra-me carros da Alpina à venda" (dou-te os links)  ·  🖼 "mostra-me uma foto de um Audi"
 🔎 Sites: "no Standvirtual pesquisa Audi A3", "procura uma bicicleta no OLX", "pesquisa iphone na Worten"
 📁 PC: "abre as transferências", "abre o meu CV", "o bluetooth não funciona"
-✨ "diz olá no ecrã do PC", "mete um meme na tela do PC", "dá um jumpscare na tela do PC"  ·  📸 "manda-me um print do ecrã"  ·  🔒 "fecha o PC" (Windows + L), "desliga o PC", "reinicia o PC", "suspende o PC" (pergunto sempre antes; "cancela o desligar")
+✨ "diz olá no ecrã do PC", "mete um meme na tela do PC" (os teus ou da net; "mete o meme do macaco"; manda fotos/GIFs ao bot para os guardar), "dá um jumpscare na tela do PC"  ·  📸 "manda-me um print do ecrã"  ·  🔒 "fecha o PC" (Windows + L), "desliga o PC", "reinicia o PC", "suspende o PC" (pergunto sempre antes; "cancela o desligar")
 🩺 "como está o PC?", "faz um diagnóstico", "temperatura do PC" (CPU, RAM, disco, placa gráfica, apps abertas)
 📬 "alguém me mandou mensagem?" (WhatsApp, Discord separado em amigos/grupos/servidores, Instagram, TikTok e LinkedIn; fecho o que abri)
 🌍 "quem ganhou o jogo do Benfica ontem?" (pesquisa na net; precisa da chave grátis do Gemini)

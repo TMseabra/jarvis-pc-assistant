@@ -33,7 +33,7 @@ def test_memes_flow_and_requests(tmp_path):
 
     shown = []
     options = [("Drake meme", tmp_path / "a.jpg"), ("Cat meme", tmp_path / "b.jpg")]
-    flow = memes.MemeFlow(fetcher=lambda: options, show=shown.append)
+    flow = memes.MemeFlow(fetcher=lambda: options, show=shown.append, mine=lambda: [])
     out = flow.start()
     assert "1. Drake meme" in out and f"📎 {tmp_path / 'a.jpg'}" in out and flow.waiting
     assert "de 1 a 2" in flow.choose("9")
@@ -69,6 +69,7 @@ def test_brain_meme_and_jumpscare(monkeypatch):
     executor = ToolExecutor(messenger=FakeMessenger())
     shown, scares = [], []
     executor.memes.fetcher = lambda: [("A", "a.jpg"), ("B", "b.jpg")]
+    executor.memes.mine = lambda: []
     executor.memes.show = shown.append
     from jarvis import memes
 
@@ -84,3 +85,37 @@ def test_scary_face_and_scream(tmp_path):
     assert img.size == (300, 300)
     wav = overlay.scream_wav(tmp_path / "g.wav", seconds=0.3)
     assert wav.stat().st_size > 10000
+
+
+def test_my_memes_first_and_by_name(tmp_path):
+    from jarvis import memes
+
+    for name in ("Macaco a sorrir.png", "Jonah Hill facepalm.png", "notas.txt"):
+        (tmp_path / name).write_bytes(b"x")
+    mine = memes.my_memes(tmp_path)
+    assert sorted(n for n, _ in mine) == ["Jonah Hill facepalm", "Macaco a sorrir"]
+    shown = []
+    flow = memes.MemeFlow(fetcher=lambda: [("Net meme", "n.jpg")], show=shown.append, mine=lambda: mine)
+    assert "Macaco a sorrir" in flow.start("mete o meme do macaco na tela") and shown[-1].name == "Macaco a sorrir.png"
+    out = flow.start("mete um meme na tela do pc")
+    assert "Os teus memes" in out and flow.waiting
+    assert "Net meme" in flow.choose("da net")
+    assert memes.MEME_REQUEST.search("mete o meme do macaco")
+
+
+def test_save_meme_and_link(tmp_path):
+    from jarvis import memes
+
+    p1 = memes.save_meme(b"a", "Speed", ".gif", tmp_path)
+    p2 = memes.save_meme(b"b", "Speed", ".gif", tmp_path)
+    assert p1.name == "Speed.gif" and p2.name == "Speed (2).gif"
+
+    class R:
+        def __init__(self, text="", content=b"", kind="text/html"):
+            self.text, self.content, self.headers = text, content, {"content-type": kind}
+
+    page = '<meta class="dynamic" property="og:image" content="https://media1.tenor.com/m/abc/speed.gif">'
+    get = lambda url: R(content=b"GIF", kind="image/gif") if url.endswith(".gif") else R(text=page)  # noqa: E731
+    (tmp_path / "links").mkdir()
+    path = memes.save_from_link("https://tenor.com/pt-PT/view/speed-gif-1", "", get=get, folder=tmp_path / "links")
+    assert path.name == "speed.gif" and path.read_bytes() == b"GIF"

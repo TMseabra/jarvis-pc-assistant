@@ -89,6 +89,15 @@ class TelegramAPI:
         return result["result"]
 
 
+    def download(self, file_id: str) -> tuple[bytes, str]:
+        """Ficheiro que mandaste ao bot -> (bytes, caminho no Telegram)."""
+        info = self.call("getFile", file_id=file_id)
+        url = f"https://api.telegram.org/file/bot{self.token}/{info['file_path']}"
+        return self.http.get(url, timeout=60).content, info["file_path"]
+
+
+MEME_LINK = re.compile(r"https?://(?:www\.)?(?:tenor\.com|giphy\.com|media\d*\.giphy\.com|media\d*\.tenor\.com|"
+                       r"i\.imgur\.com|imgur\.com)/\S+", re.IGNORECASE)
 LIVE_SECONDS = 60
 LIVE_REQUEST = re.compile(
     r"(?:ecr[aã]|tela|pc|computador).*(?:ao\s+vivo|em\s+direto|tempo\s+real|\blive\b)|"
@@ -154,8 +163,13 @@ class TelegramBot:
         if user not in self.allowed_ids:
             log.warning("Telegram: mensagem ignorada de um utilizador não autorizado (%s)", user)
             return
+        media = message.get("animation") or message.get("document") or \
+            (message["photo"][-1] if message.get("photo") else None)
+        if media or MEME_LINK.search(text):
+            threading.Thread(target=self.save_meme, args=(chat, message, media), daemon=True).start()
+            return
         if not text:
-            self.send(chat, "Por agora só percebo mensagens de texto.")
+            self.send(chat, "Por agora só percebo mensagens de texto, fotos e GIFs.")
             return
         if time.time() - message.get("date", time.time()) > STALE_SECONDS:
             # Chegou enquanto o Jarvis estava desligado: não executar pedidos antigos de repente.
@@ -189,6 +203,33 @@ class TelegramBot:
             threading.Thread(target=self.live_screen, args=(chat,), daemon=True, name="ecra-ao-vivo").start()
             return
         self.jobs.put((text, chat))
+
+    # --- memes que mandas ao bot ---------------------------------------------------
+
+    def save_meme(self, chat: int, message: dict, media: dict | None):
+        """Fotos, GIFs e links do Tenor/Giphy -> Ambiente de Trabalho\\Jarvis\\Meus memes."""
+        from jarvis import memes
+
+        caption = (message.get("caption") or "").strip()
+        try:
+            if media:
+                name = caption or media.get("file_name", "").rsplit(".", 1)[0] or ""
+                mime = media.get("mime_type", "image/jpeg")
+                if not (mime.startswith("image/") or mime.startswith("video/")):
+                    self.send(chat, "Esse ficheiro não é uma imagem nem um GIF: não o guardei.")
+                    return
+                data, file_path = self.api.download(media["file_id"])
+                ext = "." + file_path.rsplit(".", 1)[-1] if "." in file_path else ".jpg"
+                path = memes.save_meme(data, name or f"meme {time.strftime('%d-%m %H-%M-%S')}", ext)
+            else:
+                url = MEME_LINK.search(message.get("text", "")).group(0)
+                name = MEME_LINK.sub("", message.get("text", "")).strip()
+                path = memes.save_from_link(url, name)
+        except Exception as exc:
+            self.send(chat, f"Não consegui guardar esse meme: {exc}")
+            return
+        self.send(chat, f"😂 Guardei o meme \"{path.stem}\". Diz \"mete o meme {path.stem} na tela\" para o pôr no ecrã. "
+                        "(Se escreveres uma legenda na foto, fica com esse nome.)")
 
     # --- ecrã ao vivo ----------------------------------------------------------
 

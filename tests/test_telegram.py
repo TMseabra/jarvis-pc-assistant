@@ -205,3 +205,33 @@ def test_live_screen_updates_same_message():
     assert api.calls == ["editMessageCaption"]
     assert LIVE_REQUEST.search("mostra-me o ecrã ao vivo") and LIVE_REQUEST.search("quero ver o pc em tempo real")
     assert not LIVE_REQUEST.search("manda-me um print do ecrã")
+
+
+def test_photos_and_links_are_saved_as_memes(monkeypatch, tmp_path):
+    import time as _time
+
+    from jarvis import memes
+    from jarvis.telegram_bot import TelegramBot
+
+    monkeypatch.setattr(memes, "my_folder", lambda: tmp_path)
+
+    class API:
+        def __init__(self):
+            self.messages = []
+
+        def call(self, method, **params):
+            if method == "sendMessage":
+                self.messages.append(params["text"])
+            return {}
+
+        def download(self, file_id):
+            return b"JPEGDATA", "photos/file_1.jpg"
+
+    api = API()
+    bot = TelegramBot(api, {1}, handle=lambda text, chat: "")
+    msg = {"from": {"id": 1}, "chat": {"id": 1}, "date": _time.time(), "caption": "Macaco fixe",
+           "photo": [{"file_id": "small"}, {"file_id": "big"}]}
+    bot.save_meme(1, msg, msg["photo"][-1])
+    assert (tmp_path / "Macaco fixe.jpg").read_bytes() == b"JPEGDATA"
+    assert "Guardei o meme \"Macaco fixe\"" in api.messages[-1]
+    assert bot.jobs.empty()

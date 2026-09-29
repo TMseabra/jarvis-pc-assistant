@@ -716,7 +716,7 @@ class ToolExecutor:
 
             return diagnostics.pc_status()
         if name == "meme_start":
-            return self.memes.start()
+            return self.memes.start(request)
         if name == "meme_choose":  # só chamado pelo Brain, com a resposta à lista
             return self.memes.choose(*_require(args, "choice"))
         if name == "jumpscare":
