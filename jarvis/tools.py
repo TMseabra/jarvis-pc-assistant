@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import ai_web, charts, classroom, files, media, projects, roblox, screen, social, steam, system, web
+from jarvis.actions import ai_web, charts, classroom, files, media, projects, roblox, screen, site_search, social, steam, system, web
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -199,6 +199,22 @@ TOOL_SPECS = [
             "type": "object",
             "properties": {"monitor": {"type": "integer", "description": "0 = todos os ecrãs, 1, 2... = um ecrã."}},
             "required": [],
+        },
+    },
+    {
+        "name": "site_search",
+        "description": (
+            "Pesquisa DENTRO de um site e abre os resultados: 'no Standvirtual pesquisa Audi A3', "
+            "'procura uma bicicleta no OLX', 'pesquisa iphone na Worten'. Não usar para YouTube, "
+            "Spotify, TikTok nem para pesquisas gerais na net."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "site": {"type": "string", "description": "Nome ou domínio do site, ex.: 'standvirtual', 'olx.pt'."},
+                "query": {"type": "string", "description": "O que pesquisar, tal como o utilizador disse."},
+            },
+            "required": ["site", "query"],
         },
     },
     {
@@ -636,6 +652,8 @@ class ToolExecutor:
             return text
         if name == "lock_pc":
             return system.lock_pc()
+        if name == "site_search":
+            return site_search.site_search(*_require(args, "site", "query"))
         if name == "classroom_start":
             return self.classroom.start()
         if name == "classroom_choose":  # só chamado pelo Brain, com a resposta à pergunta anterior

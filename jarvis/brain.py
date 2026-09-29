@@ -8,6 +8,7 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
+from jarvis.actions.site_search import parse_site_search
 from jarvis.tools import (
     TOOL_SPECS,
     ToolExecutor,
@@ -43,7 +44,7 @@ open_ai_chat para abrir uma ("abre a segunda", "a do TaskFlow"), continue_ai_cha
 - responder à última mensagem recebida / às conversas por ler (reply_last_message);
 - fechar uma aplicação (close_app);
 - entrar num jogo DENTRO do Roblox, só quando ele disser "no Roblox" (play_roblox); "abre o jogo X" sem Roblox é open_app;
-- bloquear o PC (lock_pc); ver mensagens novas no WhatsApp/Discord/Instagram/TikTok/LinkedIn (check_messages);
+- bloquear o PC (lock_pc); ver mensagens novas no WhatsApp/Discord/Instagram/TikTok/LinkedIn (check_messages); pesquisar dentro de um site como o Standvirtual ou o OLX (site_search);
 - perguntas que precisam da internet ou de informação atual (web_answer);
 - gráficos (make_chart; horas da Steam: steam_stats com chart);
 - print do ecrã (screenshot; pelo Telegram a imagem é enviada no chat);
@@ -216,6 +217,10 @@ class Brain:
                 return result.content
             flow.cancel()  # outro pedido: segue normalmente
         # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
+        site_query = parse_site_search(text)
+        if site_query:
+            site, query = site_query
+            return self._run_tool(ToolCall("site_search", {"site": site, "query": query}), request=text).content
         if _CLASSROOM_REQUEST.search(text):
             return self._run_tool(ToolCall("classroom_start", {}), request=text).content
         if _SCREENSHOT_REQUEST.search(text):

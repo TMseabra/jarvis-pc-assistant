@@ -10,6 +10,7 @@ HELP_TEXT = """Olá, sou o Jarvis. Isto é o que sei fazer:
 💻 Código: "abre o TaskFlow no VS Code", "continua o trabalho no meu GitHub", "diz ao Claudinho para continuar no TaskFlow"
 🎨 IA: "faz-me uma imagem de…" (ChatGPT), "faz-me um script que…" (Claude), "que conversas tenho no Claude?", "abre o Claude na minha última conversa"
 🎮 Steam: "qual é o jogo com mais horas nos meus favoritos?"
+🔎 Sites: "no Standvirtual pesquisa Audi A3", "procura uma bicicleta no OLX", "pesquisa iphone na Worten"
 📁 PC: "abre as transferências", "abre o meu CV", "o bluetooth não funciona"
 📸 "manda-me um print do ecrã"  ·  🔒 "bloqueia o PC"
 📬 "alguém me mandou mensagem?" (WhatsApp, Discord separado em amigos/grupos/servidores, Instagram, TikTok e LinkedIn; fecho o que abri)
