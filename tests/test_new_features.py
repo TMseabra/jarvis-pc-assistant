@@ -225,6 +225,7 @@ def test_open_watched_video(tmp_path, monkeypatch):
     _history_db(db, [("AAAAAAAAAAA", "Antigo", 60, 100), ("BBBBBBBBBBB", "Recente", 5, 100)])
     monkeypatch.setattr(media, "history_files", lambda: [db])
     monkeypatch.setattr(media, "_opened_by_jarvis", lambda: set())
+    monkeypatch.setattr(media, "open_from_history_page", lambda position: None)  # página não lida
     opened = []
     monkeypatch.setattr(media, "open_url", opened.append)
     assert "Recente" in media.open_watched_video(1)
@@ -370,3 +371,93 @@ def test_window_matching():
     assert windows.matches("Spotify", "Spotify Premium", "Spotify.exe")
     assert not windows.matches("Spotify", "Jarvis — Spotify", "python.exe")
     assert not windows.matches("Discord", "Opera", "opera.exe")
+
+
+# --- responder a quem mandou mensagem ------------------------------------------------
+
+from jarvis.actions.desktop_chat import whatsapp_chat_name, whatsapp_preview  # noqa: E402
+from jarvis.tools import parse_reply_to, unread_contacts  # noqa: E402
+
+SUMMARY = """WhatsApp (2 por ler):
+- IP ECL (16:40): Rafael: vou chegar atrasado
+- Rafael Pedro (16:50): a tua loja é má
+Discord:
+- 👤 Amigos: Rafosto (2)
+- 👥 Grupos: Broke bois
+- 🌐 Comunidades: 3 servidores com mensagens por ler."""
+
+
+def test_whatsapp_names_without_unread_count():
+    assert whatsapp_chat_name("1 mensagem não lida Rafael Pedro 16:50 olá") == "Rafael Pedro"
+    assert whatsapp_preview("3 mensagens não lidas Rafa 11:24 bora")[0] == "Rafa"
+
+
+def test_unread_contacts_from_summary():
+    assert unread_contacts(SUMMARY) == [("whatsapp", "IP ECL"), ("whatsapp", "Rafael Pedro"),
+                                        ("discord", "Rafosto"), ("discord", "Broke bois")]
+
+
+def test_parse_reply_to():
+    unread = unread_contacts(SUMMARY)
+    assert parse_reply_to("sim responde a esta Rafael Pedro a criticar a sua loja e diz L bozo", unread) == \
+        ("whatsapp", "Rafael Pedro", "L bozo")
+    assert parse_reply_to("responde ao Rafael Pedro", unread) == ("whatsapp", "Rafael Pedro", None)
+    assert parse_reply_to("responde ao rafosto", unread) == ("discord", "Rafosto", None)
+    assert parse_reply_to("abre o spotify", unread) is None
+    assert parse_reply_to("responde ao Rafael Pedro", []) is None
+
+
+def test_brain_reply_flow_asks_then_sends():
+    from jarvis.brain import Brain
+    from tests.test_brain import FakeLLM, FakeMessenger
+
+    messenger = FakeMessenger()
+    brain = Brain(llm=FakeLLM([]), executor=ToolExecutor(messenger=messenger))
+    brain.last_unread = unread_contacts(SUMMARY)
+    assert "O que queres dizer ao Rafael Pedro no WhatsApp?" == brain.handle("responde ao Rafael Pedro")
+    brain.handle("L bozo")
+    assert messenger.sent == [("whatsapp", "Rafael Pedro", "L bozo")]
+    brain.handle("responde ao rafosto e diz bora jogar")
+    assert messenger.sent[-1] == ("discord", "Rafosto", "bora jogar")
+
+
+def test_model_question_sets_pending_send():
+    from jarvis.brain import Brain
+    from jarvis.llm import StepResult
+    from tests.test_brain import FakeLLM, FakeMessenger
+
+    messenger = FakeMessenger()
+    question = StepResult(text="Escreve o que queres dizer com o Rafael Pedro no WhatsApp. "
+                               "![x](https://i.imgur.com/1.png)", tool_calls=[])
+    llm = FakeLLM([question, question])
+    brain = Brain(llm=llm, executor=ToolExecutor(messenger=messenger))
+    reply = brain.handle("quero falar com alguém")
+    assert "imgur" not in reply
+    brain.handle("ganda L")
+    assert messenger.sent == [("whatsapp", "Rafael Pedro", "ganda L")]
+
+
+def test_history_page_links_order_and_titles():
+    class Info:
+        def __init__(self, name):
+            self.name = name
+
+    class Link:
+        def __init__(self, url, name):
+            self.element_info = Info(name)
+            self.iface_value = type("V", (), {"CurrentValue": url})()
+
+    class Doc:
+        def descendants(self, control_type):
+            return [Link("https://www.youtube.com/", "Início"),
+                    Link("https://www.youtube.com/watch?v=PR-nxqmG3V8&t=5s", "Jarvis for Linux 3 minutes, 57 seconds"),
+                    Link("https://www.youtube.com/watch?v=PR-nxqmG3V8", "Jarvis for Linux"),
+                    Link("https://www.youtube.com/watch?v=p-oFxcgg1MY", "Drive Thru 16 minutes")]
+
+    links = media.history_page_links(Doc())
+    assert [(v, t) for v, t, _ in links] == [("PR-nxqmG3V8", "Jarvis for Linux"), ("p-oFxcgg1MY", "Drive Thru")]
+
+
+def test_open_watched_video_prefers_youtube_history_page(monkeypatch):
+    monkeypatch.setattr(media, "open_from_history_page", lambda position: "Drive Thru")
+    assert "Drive Thru" in media.open_watched_video(1) and "histórico do YouTube" in media.open_watched_video(1)

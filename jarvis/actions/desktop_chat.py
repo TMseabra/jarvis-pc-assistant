@@ -329,14 +329,19 @@ _WA_TIME = re.compile(
 )
 
 
+_WA_UNREAD = re.compile(r"\b\d+\s+(?:mensage(?:m|ns)\s+não\s+lidas?|unread\s+messages?)\s*", re.IGNORECASE)
+
+
 def whatsapp_chat_name(item_name: str) -> str:
     """'A Princesa Sofia 💙 01:00 última mensagem' -> 'A Princesa Sofia 💙'."""
+    item_name = _WA_UNREAD.sub("", item_name)
     m = _WA_TIME.search(item_name)
     return (item_name[: m.start()] if m else item_name).strip()
 
 
 def whatsapp_preview(item_name: str) -> tuple[str, str, str]:
     """'Rafa 11:24 bora jogar?' -> ('Rafa', '11:24', 'bora jogar?')."""
+    item_name = _WA_UNREAD.sub("", item_name)
     m = _WA_TIME.search(item_name)
     if not m:
         return item_name.strip(), "", ""

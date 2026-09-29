@@ -148,8 +148,67 @@ def watched_videos(files: list[Path] | None = None, min_seconds: float = 10, lim
     return out[:limit]
 
 
+_WATCH_ID = re.compile(r"[?&]v=([\w-]{11})")
+# "Jarvis for Linux 3 minutes, 57 seconds" -> "Jarvis for Linux" (o leitor de ecrã junta a duração)
+_DURATION = re.compile(
+    r"(?:\s+\d+\s+(?:hours?|minutes?|seconds?|horas?|minutos?|segundos?),?)+\s*$", re.IGNORECASE)
+
+
+def history_page_links(document) -> list[tuple[str, str, object]]:
+    """Links de vídeos na página youtube.com/feed/history, por ordem: [(id, título, elemento)]."""
+    out, seen = [], set()
+    for link in document.descendants(control_type="Hyperlink"):
+        try:
+            url = link.iface_value.CurrentValue or ""
+        except Exception:
+            continue
+        m = _WATCH_ID.search(url)
+        name = (link.element_info.name or "").strip()
+        if not m or m.group(1) in seen or not name:
+            continue
+        seen.add(m.group(1))
+        out.append((m.group(1), _DURATION.sub("", name).strip(), link))
+    return out
+
+
+def open_from_history_page(position: int = 1, timeout: float = 25.0) -> str | None:
+    """Abre youtube.com/feed/history (o histórico da tua conta: inclui o telemóvel e outros browsers)
+    e carrega no vídeo número `position`. Devolve None se não conseguir ler a página."""
+    import time
+
+    try:
+        import win32gui
+        from pywinauto import Desktop
+    except ImportError:
+        return None
+    open_url("https://www.youtube.com/feed/history")
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        hwnd = win32gui.GetForegroundWindow()
+        if "youtube" in win32gui.GetWindowText(hwnd).lower():
+            try:
+                window = Desktop(backend="uia").window(handle=hwnd)
+                links = history_page_links(window)
+            except Exception:
+                links = []
+            if len(links) >= position:
+                video_id, title, link = links[position - 1]
+                try:
+                    link.invoke()
+                except Exception:
+                    link.click_input()
+                return title
+        time.sleep(1.0)
+    return None
+
+
 def open_watched_video(position: int = 1) -> str:
     """Abre o último (ou o penúltimo, ...) vídeo do YouTube que viste."""
+    position = max(1, int(position or 1))
+    which = "o último vídeo que viste" if position == 1 else f"o {position}.º vídeo mais recente que viste"
+    title = open_from_history_page(position)
+    if title:
+        return f"Abri {which} (do teu histórico do YouTube): \"{title}\"."
     videos = watched_videos()
     if not videos:
         return "Não encontrei vídeos do YouTube no teu histórico do browser."

@@ -8,7 +8,14 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
-from jarvis.tools import TOOL_SPECS, ToolExecutor, extract_dictated_message, parse_send_target
+from jarvis.tools import (
+    TOOL_SPECS,
+    ToolExecutor,
+    extract_dictated_message,
+    parse_reply_to,
+    parse_send_target,
+    unread_contacts,
+)
 
 SYSTEM_PROMPT = """És o Jarvis, um assistente pessoal que controla o PC do utilizador.
 Respondes sempre em português de Portugal (tratas o utilizador por "tu", nunca por "você"), \
@@ -147,6 +154,15 @@ _CLASSROOM_REQUEST = re.compile(
     r"que\s+trabalhos\s+tenho",
     re.IGNORECASE,
 )
+# "Escreve o que queres dizer com o Rafael Pedro no WhatsApp", "Que mensagem queres enviar ao X no Discord?"
+_ASKS_MESSAGE = re.compile(
+    r"(?:o\s+que|que\s+mensagem|qual\s+(?:[eé]\s+a\s+)?mensagem)\s+(?:queres|quer|devo|vou)\s+"
+    r"(?:dizer|enviar|mandar|escrever|responder)\s+(?:a|ao|à|com|com\s+o|com\s+a|para|para\s+o|para\s+a)\s+"
+    r"(?P<contact>[^?.!\n]+?)\s+(?:no|na|pelo|pela)\s+(?P<platform>whatsapp|discord|telegram)\b",
+    re.IGNORECASE,
+)
+# Imagens inventadas pelo modelo ("![vídeo](https://i.imgur.com/1234567.png)").
+_FAKE_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)\s*")
 ACTION_LOCK = threading.RLock()
 
 
@@ -168,6 +184,7 @@ class Brain:
             self.executor.compose = lambda contact, messages: compose_reply(self.llm, contact, messages)
         # "manda msg ao X no Discord" sem texto: pergunta a mensagem e a resposta seguinte é enviada.
         self.pending_send: tuple[str, str] | None = None
+        self.last_unread: list[tuple[str, str]] = []  # quem tinha mensagens por ler (último check_messages)
 
     def reset(self):
         self.llm.reset()
@@ -208,6 +225,17 @@ class Brain:
             from jarvis.help import HELP_TEXT
 
             return HELP_TEXT
+        reply = parse_reply_to(text, self.last_unread)
+        if reply:
+            platform, contact, message = reply
+            if message:  # "responde ao Rafael Pedro e diz L bozo": envia já
+                result = self._run_tool(
+                    ToolCall("send_message", {"platform": platform, "contact": contact, "message": message}),
+                    request="",
+                )
+                return result.content if not result.is_error else f"Não enviei: {result.content}"
+            self.pending_send = (platform, contact)
+            return f"O que queres dizer ao {contact} no {_PLATFORM_NAMES.get(platform, platform)}?"
         target = parse_send_target(text)
         if target and not extract_dictated_message(text):
             self.pending_send = target
@@ -233,6 +261,8 @@ class Brain:
             log.exception("erro inesperado em %s", call.name)
             result = ToolResult(call, f"Erro inesperado: {type(exc).__name__}: {exc}", is_error=True)
         log.info("  -> %s%s", "ERRO " if result.is_error else "", result.content[:300])
+        if call.name == "check_messages" and not result.is_error:
+            self.last_unread = unread_contacts(result.content)
         if self.on_tool_result:
             self.on_tool_result(result)
         return result
@@ -244,7 +274,15 @@ class Brain:
             if quick is not None:
                 log.info("envio em dois passos: %r -> %r", text, quick)
                 return quick
-            return self._handle(text)
+            reply = _FAKE_IMAGE.sub("", self._handle(text)).strip()
+            # O modelo perguntou ele próprio o texto ("Escreve o que queres dizer ao X no WhatsApp"):
+            # a próxima mensagem é para enviar a essa pessoa, tal e qual.
+            asked = _ASKS_MESSAGE.search(reply)
+            if asked and not self.pending_send:
+                platform = asked.group("platform").lower()
+                contact = re.sub(r"^(?:o|a)\s+", "", asked.group("contact").strip(), flags=re.IGNORECASE)
+                self.pending_send = (platform, contact)
+            return reply
 
     def _handle(self, text: str) -> str:
         """Processa um comando do utilizador e devolve a resposta final do Jarvis.

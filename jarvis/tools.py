@@ -431,6 +431,59 @@ def parse_send_target(request: str) -> tuple[str, str] | None:
     return None
 
 
+_UNREAD_LINE = re.compile(r"^- (?P<name>.+?) \((?:[^)]*)\)(?::|$)")
+_DISCORD_PEOPLE = re.compile(r"^- \S+ (?:Amigos|Grupos): (?P<names>.+)$")
+
+
+def unread_contacts(summary: str) -> list[tuple[str, str]]:
+    """Resultado do check_messages -> [(plataforma, nome)] de quem tem mensagens por ler."""
+    out, platform = [], ""
+    for line in summary.splitlines():
+        head = line.split(" ", 1)[0].rstrip(":").lower()
+        if head in ("whatsapp", "discord"):
+            platform = head
+            continue
+        if platform == "whatsapp" and (m := _UNREAD_LINE.match(line)):
+            out.append(("whatsapp", m.group("name").strip()))
+        elif platform == "discord" and (m := _DISCORD_PEOPLE.match(line)):
+            out += [("discord", re.sub(r"\s*\(\d+\)$", "", n).strip()) for n in m.group("names").split(", ")]
+    return out
+
+
+_REPLY_TO = re.compile(r"^\W*(?:(?:sim|s|ok|jarvis|podes)\W+)*(?:responde|responder|responda|respondes|manda|envia|diz|escreve)\b",
+                       re.IGNORECASE)
+_REPLY_MESSAGE = re.compile(
+    r"\b(?:diz(?:-lhe|e|er)?|a\s+dizer|dizendo|escreve(?:-lhe)?|manda(?:-lhe)?)\s+(?:que\s+)?(?P<msg>.+)$", re.IGNORECASE)
+
+
+def _fold_words(text: str) -> list[str]:
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    return re.findall(r"[a-z0-9]+", text)
+
+
+def parse_reply_to(request: str, unread: list[tuple[str, str]]) -> tuple[str, str, str | None] | None:
+    """"responde ao Rafael Pedro e diz L bozo" (depois de ver as mensagens novas) ->
+    ("whatsapp", "Rafael Pedro", "L bozo"). Sem texto ditado, a mensagem vem None (pergunta-se)."""
+    if not unread or not _REPLY_TO.match(request):
+        return None
+    words = set(_fold_words(request))
+    best, best_score = None, 0
+    for platform, name in unread:
+        name_words = [w for w in _fold_words(name) if len(w) >= 3]
+        score = sum(w in words for w in name_words)
+        if score > best_score or (score == best_score and score and platform in request.lower()):
+            best, best_score = (platform, name), score
+    if not best:
+        return None
+    # O texto a enviar vem depois do nome ("... Rafael Pedro ... e diz L bozo").
+    last = max(request.lower().rfind(w) for w in _fold_words(best[1]) if len(w) >= 3)
+    m = _REPLY_MESSAGE.search(request[max(last, 0):])
+    message = _TRAILING_PLATFORM.sub("", m.group("msg").strip()) if m else None
+    return best[0], best[1], message or None
+
+
 _REPLY_SAY = re.compile(r"\b(?:a\s+dizer|dizendo)[:,]?\s+(?:que\s+)?(.+)$", re.IGNORECASE)
 
 
