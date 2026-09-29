@@ -129,3 +129,109 @@ def _type_when_focused(title_word: str, text: str, timeout: float = 15.0) -> boo
                 return True
         time.sleep(0.3)
     return False
+
+
+# --- listar e abrir conversas --------------------------------------------------------
+
+_TITLE_SUFFIX = {"claude": (" - Claude", " | Claude"), "chatgpt": (" - ChatGPT", " | ChatGPT")}
+_ORDINALS = {"primeira": 1, "segunda": 2, "terceira": 3, "quarta": 4, "quinta": 5, "sexta": 6,
+             "setima": 7, "sétima": 7, "oitava": 8}
+
+
+def recent_chats(site: str, limit: int = 8, files=None) -> list[tuple[str, str]]:
+    """[(título, url)] das conversas mais recentes do Claude/ChatGPT, tiradas do histórico do browser."""
+    import shutil
+    import sqlite3
+    import tempfile
+    import uuid
+    from pathlib import Path
+
+    from jarvis.actions.media import history_files
+
+    rows = []
+    for history in files if files is not None else history_files():
+        copy = Path(tempfile.gettempdir()) / f"jarvis_history_{uuid.uuid4().hex}.sqlite"
+        try:
+            shutil.copy2(history, copy)
+            con = sqlite3.connect(copy)
+            rows += con.execute("SELECT title, url, last_visit_time FROM urls WHERE url LIKE ?",
+                                (CHAT_URLS[site][1],)).fetchall()
+            con.close()
+        except (OSError, sqlite3.Error):
+            continue
+        finally:
+            copy.unlink(missing_ok=True)
+    rows.sort(key=lambda r: r[2], reverse=True)
+    seen, chats = set(), []
+    for title, url, _ in rows:
+        url = url.split("?")[0]
+        if url in seen:
+            continue
+        seen.add(url)
+        title = title or ""
+        for suffix in _TITLE_SUFFIX[site]:
+            if title.endswith(suffix):
+                title = title[: -len(suffix)]
+        if title.strip() in ("", "Claude", "ChatGPT"):
+            title = "(conversa sem título)"
+        chats.append((title.strip(), url))
+    return chats[:limit]
+
+
+def _site(site: str) -> str:
+    site = (site or "").lower().replace("claudinho", "claude")
+    if "gpt" in site:
+        return "chatgpt"
+    return site if site in CHAT_URLS else "claude"
+
+
+def list_chats(site: str = "claude") -> str:
+    site = _site(site)
+    chats = recent_chats(site)
+    name = CHAT_URLS[site][0]
+    if not chats:
+        return f"Não encontrei conversas do {name} no histórico do browser."
+    lines = [f"As tuas conversas mais recentes no {name}:"]
+    lines += [f"{i}. {title}" for i, (title, _) in enumerate(chats, 1)]
+    lines.append("Queres abrir alguma? Diz o número ou o nome.")
+    return "\n".join(lines)
+
+
+def pick_chat(chats: list[tuple[str, str]], which: str) -> tuple[str, str] | None:
+    """"2", "a segunda", "a do TaskFlow" -> a conversa escolhida."""
+    import difflib
+    import re
+
+    text = which.strip().lower()
+    number = re.search(r"\d+", text)
+    index = int(number.group()) if number else next((n for w, n in _ORDINALS.items() if w in text), None)
+    if index is None and re.search(r"\b[uú]ltima\b", text):
+        index = 1
+    if index and 1 <= index <= len(chats):
+        return chats[index - 1]
+    words = [w for w in re.findall(r"\w+", text) if len(w) > 2 and w not in ("conversa", "sobre", "abre", "que")]
+    scored = [
+        (sum(w in title.lower() for w in words) + difflib.SequenceMatcher(None, text, title.lower()).ratio(),
+         (title, url))
+        for title, url in chats
+    ]
+    best = max(scored, default=(0, None), key=lambda s: s[0])
+    return best[1] if best[0] >= 1 else None
+
+
+def open_chat(site: str = "claude", which: str = "", message: str = "") -> str:
+    """Abre uma conversa (pelo número/nome da lista, ou a mais recente) e, opcionalmente, escreve lá."""
+    site = _site(site)
+    name = CHAT_URLS[site][0]
+    chats = recent_chats(site)
+    chosen = pick_chat(chats, which) if which.strip() else (chats[0] if chats else None)
+    if not chosen:
+        return f"Não encontrei essa conversa no {name}. Pede-me primeiro a lista das conversas."
+    title, url = chosen
+    open_url(url)
+    if message.strip():
+        if not _type_when_focused(name, message.strip()):
+            return f"Abri a conversa \"{title}\" no {name}, mas não consegui escrever lá."
+        return f"Abri a conversa \"{title}\" no {name} e escrevi: \"{message.strip()}\"."
+    return f"Abri a conversa \"{title}\" no {name}."
+

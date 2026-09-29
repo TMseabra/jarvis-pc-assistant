@@ -100,6 +100,9 @@ _APP_ALIASES = {
     "definicoes": "Definições",
     "whatsappweb": "WhatsApp",
     "wpp": "WhatsApp",
+    "claudeapp": "Claude",
+    "claudeinstalado": "Claude",
+    "appdoclaude": "Claude",
     "zap": "WhatsApp",
     "configuracoes": "Definições",
 }
@@ -135,6 +138,10 @@ def validate_app_name(name: str) -> str:
 # "Apps" que são sites: abrem no browser escolhido.
 _WEB_APPS = {
     "claudinho": ("Claude", "https://claude.ai/new"),
+    "claudeweb": ("Claude", "https://claude.ai/new"),
+    "claudenoopera": ("Claude", "https://claude.ai/new"),
+    "claudenobrowser": ("Claude", "https://claude.ai/new"),
+    "chatgpt": ("ChatGPT", "https://chatgpt.com/"),
 }
 
 

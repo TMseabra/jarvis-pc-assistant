@@ -218,6 +218,34 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "list_ai_chats",
+        "description": (
+            "Diz que conversas o utilizador tem no Claude (ou ChatGPT): lista as mais recentes, numeradas, "
+            "tiradas do histórico do browser. Usa para 'que conversas tenho no Claude?'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"site": {"type": "string", "enum": ["claude", "chatgpt"]}},
+            "required": [],
+        },
+    },
+    {
+        "name": "open_ai_chat",
+        "description": (
+            "Abre uma conversa do Claude/ChatGPT escolhida pelo utilizador: which = número ('2'), ordinal "
+            "('a segunda') ou parte do título ('a do TaskFlow'). message opcional: o que escrever lá."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "site": {"type": "string", "enum": ["claude", "chatgpt"]},
+                "which": {"type": "string", "description": "Número, ordinal ou parte do título."},
+                "message": {"type": "string", "description": "O que escrever na conversa (opcional)."},
+            },
+            "required": ["which"],
+        },
+    },
+    {
         "name": "read_messages",
         "description": "Abre uma conversa no WhatsApp Web, Telegram Web ou Discord e devolve as últimas mensagens.",
         "parameters": {
@@ -410,6 +438,11 @@ class ToolExecutor:
             return roblox.play(game)
         if name == "steam_stats":
             return steam.steam_stats(str(args.get("scope") or "all"))
+        if name == "list_ai_chats":
+            return ai_web.list_chats(str(args.get("site") or "claude"))
+        if name == "open_ai_chat":
+            (which,) = _require(args, "which")
+            return ai_web.open_chat(str(args.get("site") or "claude"), which, str(args.get("message") or ""))
         if name == "continue_ai_chat":
             return ai_web.continue_last_chat(str(args.get("site") or "claude"), str(args.get("message") or ""))
         if name == "close_app":

@@ -91,3 +91,33 @@ def test_play_roblox_with_just_roblox_opens_the_app(monkeypatch):
     monkeypatch.setattr(roblox, "play", lambda game: (_ for _ in ()).throw(AssertionError("não devia pesquisar")))
     assert ToolExecutor().run("play_roblox", {"game": "Roblox"}) == "Abri Roblox."
     assert opened == ["Roblox"]
+
+
+def test_recent_chats_and_pick(tmp_path):
+    db = tmp_path / "History"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE urls (id INTEGER PRIMARY KEY, title TEXT, url TEXT, last_visit_time INTEGER)")
+    con.executemany("INSERT INTO urls (title, url, last_visit_time) VALUES (?, ?, ?)", [
+        ("Bug no TaskFlow - Claude", "https://claude.ai/chat/a", 300),
+        ("Receita de bolo - Claude", "https://claude.ai/chat/b", 200),
+        ("Claude", "https://claude.ai/chat/c", 100),
+        ("Bug no TaskFlow - Claude", "https://claude.ai/chat/a?x", 50),
+    ])
+    con.commit(); con.close()
+    chats = ai_web.recent_chats("claude", files=[db])
+    assert [t for t, _ in chats] == ["Bug no TaskFlow", "Receita de bolo", "(conversa sem título)"]
+    assert ai_web.pick_chat(chats, "a segunda")[0] == "Receita de bolo"
+    assert ai_web.pick_chat(chats, "3")[0] == "(conversa sem título)"
+    assert ai_web.pick_chat(chats, "a do taskflow")[0] == "Bug no TaskFlow"
+    assert ai_web.pick_chat(chats, "a de futebol") is None
+
+
+def test_list_and_open_chat(monkeypatch):
+    chats = [("Bug no TaskFlow", "https://claude.ai/chat/a"), ("Receita", "https://claude.ai/chat/b")]
+    monkeypatch.setattr(ai_web, "recent_chats", lambda site: chats)
+    opened = []
+    monkeypatch.setattr(ai_web, "open_url", opened.append)
+    listing = ai_web.list_chats("Claudinho")
+    assert "1. Bug no TaskFlow" in listing and "2. Receita" in listing and "Queres abrir" in listing
+    assert ai_web.open_chat("claude", "2") == 'Abri a conversa "Receita" no Claude.'
+    assert opened == ["https://claude.ai/chat/b"]
