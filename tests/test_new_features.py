@@ -296,3 +296,32 @@ def test_whatsapp_web_alias():
     apps = [("WhatsApp", "5319275A.WhatsAppDesktop!App")]
     assert system.find_start_app("WhatsApp Web", apps)[0] == "WhatsApp"
     assert system.find_start_app("wpp", apps)[0] == "WhatsApp"
+
+
+# --- Spotify pela interface --------------------------------------------------------
+
+def test_best_play_match():
+    labels = ["Músicas apreciadas", "chill", "Mix de House", "Rádio de Drake", "Mix tranquila", "Tha Carter III de Lil Wayne"]
+    assert labels[media.best_play_match(labels, "playlist chill")] == "chill"
+    assert labels[media.best_play_match(labels, "mix de house")] == "Mix de House"
+    assert labels[media.best_play_match(labels, "tha carter III")] == "Tha Carter III de Lil Wayne"
+    assert media.best_play_match(labels, "Bohemian Rhapsody") is None
+
+
+def test_liked_words():
+    for q in ("favoritos", "uma música dos meus favoritos", "músicas apreciadas", "as minhas músicas", "músicas que gosto"):
+        assert media._LIKED_WORDS.search(q), q
+    assert not media._LIKED_WORDS.search("Bohemian Rhapsody")
+
+
+@pytest.mark.parametrize("args, request_text, expected", [
+    ({"play": "favoritos"}, "põe uma música dos meus favoritos", ("play", "favoritos")),
+    ({"action": "pause"}, "skipa a música", ("next", "")),
+    ({"action": "play"}, "passa à próxima", ("next", "")),
+    ({"action": "skip"}, "", ("next", "")),
+    ({"action": "play", "query": "chill"}, "põe a playlist chill", ("play", "chill")),
+    ({"action": "previous"}, "volta à música anterior", ("previous", "")),
+])
+def test_music_args(args, request_text, expected):
+    from jarvis.tools import music_args
+    assert music_args(args, request_text) == expected

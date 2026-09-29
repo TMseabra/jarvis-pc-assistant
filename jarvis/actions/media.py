@@ -244,13 +244,11 @@ def music(action: str, query: str = "") -> str:
     title = _ensure_spotify()
 
     if action == "play" and query.strip():
+        if _LIKED_WORDS.search(query):
+            return play_liked(title)
         if spotify_api.configured():
             return spotify_api.play(query.strip())
-        os.startfile("spotify:search:" + urllib.parse.quote(query.strip()))  # type: ignore[attr-defined]
-        return (
-            f"Abri a pesquisa de '{query}' no Spotify, mas não consigo pôr a tocar sozinho sem a ligação "
-            "à API do Spotify (vê a secção Spotify do README). Carrega no play do primeiro resultado."
-        )
+        return play_named(query.strip(), title)
 
     if action == "play":
         if is_playing(title):
@@ -269,8 +267,118 @@ def music(action: str, query: str = "") -> str:
             "Carreguei na pausa, mas o Spotify continua a tocar."
 
     if action in ("next", "previous"):
-        _media_key(action)
-        changed = _wait_title(lambda t: is_playing(t) and t != title, timeout=4)
-        return f"A tocar: {changed}." if changed else "Mudei de música."
+        # O botão da app ("Seguinte"/"Anterior"); se não o encontrar, as teclas multimédia.
+        window = _spotify_uia_window()
+        label = {"next": ("Seguinte", "Next"), "previous": ("Anterior", "Previous")}[action]
+        button = _find_button(window, label) if window else None
+        if button is not None:
+            button.invoke()
+        else:
+            _media_key(action)
+        changed = _wait_title(lambda t: is_playing(t) and t != title, timeout=5)
+        return f"A tocar: {changed}." if changed else "Carreguei para mudar de música, mas o Spotify não mudou."
 
     raise ValueError(f"Ação de música desconhecida: '{action}'. Usa play, pause, next ou previous.")
+
+
+# --- Spotify pela interface da app (botões "Reproduzir …") -----------------------------
+
+_LIKED_BUTTONS = ("Reproduzir Músicas apreciadas", "Reproduzir Músicas de que gostaste", "Play Liked Songs")
+_PLAY_PREFIXES = ("Reproduzir ", "Play ")
+_LIKED_WORDS = re.compile(r"favorit|gost|apreciad|minhas m[uú]sicas|minha m[uú]sica|liked", re.IGNORECASE)
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return " ".join("".join(ch for ch in decomposed if ch.isalnum() or ch.isspace()).split())
+
+
+def _spotify_uia_window():
+    from pywinauto import Desktop
+
+    for w in Desktop(backend="uia").windows(class_name="Chrome_WidgetWin_1"):
+        if _process_name(w.element_info.process_id).lower() == "spotify.exe":
+            return w
+    return None
+
+
+def _find_button(window, names):
+    return next((b for b in window.descendants(control_type="Button") if (b.element_info.name or "") in names), None)
+
+
+def play_buttons(window) -> list[tuple[str, object]]:
+    """[(o que toca, botão)] de todos os botões "Reproduzir X" visíveis na app."""
+    out = []
+    for button in window.descendants(control_type="Button"):
+        name = button.element_info.name or ""
+        for prefix in _PLAY_PREFIXES:
+            if name.startswith(prefix) and len(name) > len(prefix):
+                out.append((name[len(prefix):].strip(), button))
+    return out
+
+
+def best_play_match(labels: list[str], query: str) -> int | None:
+    """Índice do botão que melhor corresponde ao pedido (todas as palavras presentes; o mais curto)."""
+    words = [w for w in _fold(query).split() if w not in ("a", "o", "de", "do", "da", "playlist", "musica", "album")]
+    if not words:
+        return None
+    matches = [i for i, label in enumerate(labels) if all(w in _fold(label) for w in words)]
+    return min(matches, key=lambda i: len(labels[i])) if matches else None
+
+
+def _invoke_and_confirm(button, what: str, before: str) -> str:
+    button.invoke()
+    playing = _wait_title(lambda t: is_playing(t) and t != before, timeout=8) or _wait_title(is_playing, timeout=2)
+    return f"A tocar {what}: {playing}." if playing else f"Carreguei em {what}, mas o Spotify não começou a tocar."
+
+
+def play_liked(before: str = "") -> str:
+    """As tuas "Músicas apreciadas" (favoritos), a começar pela primeira."""
+    window = _spotify_uia_window()
+    button = _wait_value(lambda: _find_button(window, _LIKED_BUTTONS)) if window else None
+    if button is None:
+        return "Não encontrei as tuas Músicas apreciadas no Spotify (a app está aberta?)."
+    return _invoke_and_confirm(button, "as tuas Músicas apreciadas", before)
+
+
+def play_named(query: str, before: str = "") -> str:
+    """Uma playlist/álbum/artista visível na app; senão pesquisa e toca o primeiro resultado."""
+    window = _spotify_uia_window()
+    if window is None:
+        return "Não encontrei a janela do Spotify."
+    buttons = play_buttons(window)
+    index = best_play_match([label for label, _ in buttons], query)
+    if index is not None:
+        label, button = buttons[index]
+        return _invoke_and_confirm(button, label, before)
+    # Pesquisa no Spotify e usa o primeiro botão "Reproduzir" que aparecer com os resultados.
+    known = {label for label, _ in buttons}
+    os.startfile("spotify:search:" + urllib.parse.quote(query))  # type: ignore[attr-defined]
+
+    def first_new():
+        fresh = [(label, b) for label, b in play_buttons(window) if label not in known]
+        if not fresh:
+            return None
+        pick = best_play_match([label for label, _ in fresh], query)
+        return fresh[pick if pick is not None else 0]
+
+    found = _wait_value(first_new, timeout=10)
+    if not found:
+        return f"Pesquisei '{query}' no Spotify mas não encontrei nada para tocar."
+    label, button = found
+    return _invoke_and_confirm(button, label, before)
+
+
+def _wait_value(fn, timeout: float = 8.0):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        try:
+            value = fn()
+        except Exception:
+            value = None
+        if value:
+            return value
+        time.sleep(0.4)
+    return None
