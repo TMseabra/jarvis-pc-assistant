@@ -205,7 +205,7 @@ class Brain:
         if self.pending_send:
             platform, contact = self.pending_send
             self.pending_send = None
-            if _CANCEL.match(text):
+            if _CANCEL.match(text) and len(text.split()) <= 4:  # "não era uma amiga..." é uma mensagem
                 return "Ok, não enviei nada."
             if not is_action_request(text):  # outro pedido ("abre o Spotify") cancela o envio
                 result = self._run_tool(

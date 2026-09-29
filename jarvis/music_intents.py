@@ -36,6 +36,11 @@ PLAY = re.compile(
 )
 
 
+# "Bad Bunny a tocar", "Bad Bunny para ouvir agora por favor" -> "Bad Bunny"
+_TRAILING = re.compile(r"(?:\s+(?:a\s+tocar|para\s+(?:ouvir|tocar)|agora|j[aá]|por\s+favor|pf|pff|se\s+faz\s+favor))+\W*$",
+                       re.IGNORECASE)
+
+
 def parse_music(text: str) -> tuple[str, str] | None:
     """-> ("next", "") | ("similar", "play"|"suggest") | ("play", consulta) | None."""
     if NEXT.match(text) and not SIMILAR.search(text):
@@ -44,7 +49,7 @@ def parse_music(text: str) -> tuple[str, str] | None:
         return "similar", "play" if _WANTS_PLAY.match(text) else "suggest"
     m = PLAY.match(text)
     if m:
-        query = (m.group("q") or m.group("q2") or "").strip()
+        query = _TRAILING.sub("", (m.group("q") or m.group("q2") or "").strip())
         if query and not SIMILAR.search(query):
             return "play", query
     return None

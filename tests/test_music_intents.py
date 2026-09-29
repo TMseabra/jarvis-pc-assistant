@@ -66,3 +66,26 @@ def test_skip_and_play_artist(monkeypatch):
     brain.handle("mete outra musica")
     brain.handle("mete uma musica do bad bunny")
     assert calls == [("music", {"action": "next"}), ("music", {"action": "play", "query": "bad bunny"})]
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Jarvis, podes meter uma música do Bad Bunny a tocar no Spotify?", ("play", "Bad Bunny")),
+    ("põe uma música da Rosalía agora por favor", ("play", "Rosalía")),
+])
+def test_play_query_without_filler(text, expected):
+    assert parse_music(text) == expected
+
+
+def test_reply_prefixes_and_long_messages_are_not_cancel():
+    from jarvis.brain import Brain
+    from jarvis.tools import ToolExecutor, parse_reply_to
+    from tests.test_brain import FakeLLM, FakeMessenger
+
+    unread = [("whatsapp", "rodrigo")]
+    assert parse_reply_to("Ei Jarvis, podes responder ao Rodrigo no WhatsApp?", unread) == ("whatsapp", "rodrigo", None)
+    messenger = FakeMessenger()
+    brain = Brain(llm=FakeLLM([]), executor=ToolExecutor(messenger=messenger))
+    brain.last_unread = unread
+    brain.handle("Ei Jarvis, podes responder ao Rodrigo no WhatsApp?")
+    brain.handle("Não era uma amiga não, por acaso era a namorada")
+    assert messenger.sent == [("whatsapp", "rodrigo", "Não era uma amiga não, por acaso era a namorada")]

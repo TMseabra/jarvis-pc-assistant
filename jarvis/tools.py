@@ -520,7 +520,7 @@ def unread_contacts(summary: str) -> list[tuple[str, str]]:
     return out
 
 
-_REPLY_TO = re.compile(r"^\W*(?:(?:sim|s|ok|jarvis|podes)\W+)*(?:responde|responder|responda|respondes|manda|envia|diz|escreve)\b",
+_REPLY_TO = re.compile(r"^\W*(?:(?:sim|s|ok|jarvis|podes|consegues|ei|hey|hei|ol[aá]|oi|ent[aã]o|e|agora)\W+)*(?:responde|responder|responda|respondes|manda|envia|diz|escreve)\b",
                        re.IGNORECASE)
 _REPLY_MESSAGE = re.compile(
     r"\b(?:diz(?:-lhe|e|er)?|a\s+dizer|dizendo|escreve(?:-lhe)?|manda(?:-lhe)?)\s+(?:que\s+)?(?P<msg>.+)$", re.IGNORECASE)

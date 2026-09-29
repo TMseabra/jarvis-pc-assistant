@@ -7,6 +7,7 @@ confirmamos que a conversa aberta é a da pessoa pedida; se não der para confir
 não enviamos.
 """
 
+import contextlib
 import os
 import re
 import time
@@ -34,6 +35,70 @@ def _wait(predicate, timeout: float, interval: float = 0.25):
         if value or time.monotonic() > end:
             return value
         time.sleep(interval)
+
+
+@contextlib.contextmanager
+def keep_user_context():
+    """Guarda a janela à frente (ex.: o jogo) e a posição do rato, e repõe-nas no fim:
+    o Jarvis escreve a mensagem e devolve-te o jogo sem te roubar o rato."""
+    try:
+        import win32api
+        import win32gui
+
+        previous = win32gui.GetForegroundWindow()
+        cursor = win32api.GetCursorPos()
+    except Exception:
+        previous = cursor = None
+    try:
+        yield
+    finally:
+        if cursor is not None:
+            try:
+                win32api.SetCursorPos(cursor)
+                if previous and win32gui.IsWindow(previous) and win32gui.GetForegroundWindow() != previous:
+                    from jarvis.actions.windows import bring_to_front
+
+                    bring_to_front(previous, maximize=False)
+            except Exception:
+                pass
+
+
+def _composer_text(composer) -> str | None:
+    """Texto na caixa de escrever (só leitura), ou None se a app não o deixar ler."""
+    try:
+        return composer.iface_value.CurrentValue or ""
+    except Exception:
+        return None
+
+
+def _type_and_send(window, find_composer, message: str, app: str):
+    """Põe a janela à frente, cola o texto, confirma que ficou na caixa e só então carrega em Enter.
+    Se outra janela (um jogo) roubar o foco, tenta outra vez; se não der, não envia."""
+    import win32gui
+    from pywinauto.keyboard import send_keys
+
+    probe = " ".join(message.split())[:20]
+    for attempt in range(3):
+        composer = _wait(find_composer, WAIT_UI_S)
+        if not composer:
+            raise MessagingError(f"Não encontrei a caixa de escrever do {app}. Não enviei nada.")
+        window.set_focus()
+        composer.set_focus()
+        if win32gui.GetForegroundWindow() != window.handle:
+            time.sleep(0.3)
+            continue
+        before = _composer_text(composer)
+        if before is None or probe not in " ".join(before.split()):
+            _paste(message)
+            time.sleep(0.2)
+        typed = _composer_text(find_composer() or composer)
+        written = typed is None or probe in " ".join(typed.split())  # sem leitura: confia no colar
+        if written and win32gui.GetForegroundWindow() == window.handle:
+            send_keys("{ENTER}")
+            return
+        time.sleep(0.4)
+    raise MessagingError(f"Não consegui escrever no {app} (outra janela, talvez o jogo, estava sempre à frente). "
+                         "Não enviei nada.")
 
 
 def _paste(text: str):
@@ -230,10 +295,7 @@ class DiscordDesktop(DesktopChat):
         composer = _wait(lambda: self._composer(window), WAIT_UI_S)
         if not composer:
             raise MessagingError("Não encontrei a caixa de escrever do Discord. Não enviei nada.")
-        window.set_focus()
-        composer.set_focus()
-        _paste(message)
-        send_keys("{ENTER}")
+        _type_and_send(window, lambda: self._composer(window), message, "Discord")
         return f"Mensagem enviada para {title} no Discord."
 
     def unread_summary(self, limit: int = 5) -> str:
@@ -561,13 +623,7 @@ class WhatsAppDesktop(DesktopChat):
             message = confirm("WhatsApp", title, message)
             if not message:
                 return None
-        composer = _wait(lambda: self._composer(self._document(window, 0.5)), WAIT_UI_S)
-        if not composer:
-            raise MessagingError("Não encontrei a caixa de escrever do WhatsApp. Não enviei nada.")
-        window.set_focus()
-        composer.set_focus()
-        _paste(message)
-        send_keys("{ENTER}")
+        _type_and_send(window, lambda: self._composer(self._document(window, 0.5)), message, "WhatsApp")
         where = "(tinha mensagens por ler)" if was_unread else "(não havia conversas por ler: respondi na mais recente)"
         return f"Respondi a {title} no WhatsApp {where}. Texto enviado: \"{message}\""
 
@@ -580,13 +636,7 @@ class WhatsAppDesktop(DesktopChat):
             message = confirm(title)
             if not message:
                 return None
-        composer = _wait(lambda: self._composer(self._document(window, 0.5)), WAIT_UI_S)
-        if not composer:
-            raise MessagingError("Não encontrei a caixa de escrever do WhatsApp. Não enviei nada.")
-        window.set_focus()
-        composer.set_focus()
-        _paste(message)
-        send_keys("{ENTER}")
+        _type_and_send(window, lambda: self._composer(self._document(window, 0.5)), message, "WhatsApp")
         return f"Mensagem enviada para {title} no WhatsApp."
 
 
@@ -619,7 +669,11 @@ class ChatRouter:
         return self.backend(platform).read_messages(platform, contact, count)
 
     def send_message(self, platform: str, contact: str, message: str, confirm=None) -> str | None:
-        return self.backend(platform).send_message(platform, contact, message, confirm=confirm)
+        backend = self.backend(platform)
+        if backend is self.web:
+            return backend.send_message(platform, contact, message, confirm=confirm)
+        with keep_user_context():  # no fim, o jogo volta à frente e o rato fica onde estava
+            return backend.send_message(platform, contact, message, confirm=confirm)
 
     def check_messages(self, limit: int = 5) -> str:
         """Mensagens por ler no WhatsApp e no Discord (apps de desktop): quem, o quê e onde."""
@@ -649,7 +703,8 @@ class ChatRouter:
         backend = self.backend(platform)
         if not hasattr(backend, "reply_latest"):
             raise MessagingError(f"Responder à última mensagem ainda só funciona no WhatsApp de desktop.")
-        return backend.reply_latest(message, compose=compose, confirm=confirm)
+        with keep_user_context():
+            return backend.reply_latest(message, compose=compose, confirm=confirm)
 
     def close(self):
         self.web.close()

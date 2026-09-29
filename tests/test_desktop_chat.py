@@ -59,3 +59,68 @@ def test_router_modes():
     both = {WhatsAppDesktop.app_id, DiscordDesktop.app_id}
     assert isinstance(ChatRouter(FakeWeb(), "web", installed=both).backend("whatsapp"), FakeWeb)
     assert isinstance(ChatRouter(FakeWeb(), "desktop", installed=set()).backend("discord"), DiscordDesktop)
+
+
+def test_type_and_send_checks_text_before_enter(monkeypatch):
+    import pywinauto.keyboard
+    import win32gui
+
+    from jarvis.actions import desktop_chat
+
+    keys, pasted = [], []
+
+    class Value:
+        def __init__(self):
+            self.CurrentValue = ""
+
+    class Composer:
+        iface_value = Value()
+
+        def set_focus(self):
+            pass
+
+    composer = Composer()
+
+    class Window:
+        handle = 42
+
+        def set_focus(self):
+            pass
+
+    monkeypatch.setattr(win32gui, "GetForegroundWindow", lambda: 42)
+    monkeypatch.setattr(pywinauto.keyboard, "send_keys", keys.append)
+
+    def paste(text):
+        pasted.append(text)
+        composer.iface_value.CurrentValue = text
+
+    monkeypatch.setattr(desktop_chat, "_paste", paste)
+    desktop_chat._type_and_send(Window(), lambda: composer, "olá tudo bem", "WhatsApp")
+    assert pasted == ["olá tudo bem"] and keys == ["{ENTER}"]
+
+
+def test_type_and_send_refuses_when_game_keeps_focus(monkeypatch):
+    import pywinauto.keyboard
+    import win32gui
+
+    from jarvis.actions import desktop_chat
+    from jarvis.actions.messaging import MessagingError
+
+    keys = []
+
+    class Composer:
+        def set_focus(self):
+            pass
+
+    class Window:
+        handle = 42
+
+        def set_focus(self):
+            pass
+
+    monkeypatch.setattr(win32gui, "GetForegroundWindow", lambda: 99)  # o jogo
+    monkeypatch.setattr(pywinauto.keyboard, "send_keys", keys.append)
+    monkeypatch.setattr(desktop_chat.time, "sleep", lambda s: None)
+    with pytest.raises(MessagingError, match="Não enviei nada"):
+        desktop_chat._type_and_send(Window(), lambda: Composer(), "olá", "WhatsApp")
+    assert keys == []
