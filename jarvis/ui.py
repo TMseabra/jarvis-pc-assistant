@@ -37,7 +37,7 @@ _LOGO = r"""
 _ICONS = {
     "open_app": "🚀", "open_website": "🌐", "web_search": "🔎", "play_video": "▶️ ",
     "music": "🎵", "open_project": "💻", "read_messages": "📨", "send_message": "💬",
-    "ask_ai": "🎨", "open_path": "📁",
+    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠",
 }
 
 
@@ -61,6 +61,8 @@ def tool_label(call: ToolCall) -> str:
         "send_message": f"A abrir a conversa com {a.get('contact', '')} no {platform}",
         "ask_ai": f"A pedir ao {ai_site}: “{a.get('task', '')}”",
         "open_path": f"A abrir {a.get('name', '')}",
+        "continue_work": "A ver onde ficaste" + (f" em {a.get('name')}" if a.get("name") else " no GitHub")
+        + " e a pedir ao Claude para continuar",
     }
     return labels.get(call.name, call.name)
 

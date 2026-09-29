@@ -107,6 +107,20 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "continue_work",
+        "description": (
+            "Continua o trabalho de programação onde o utilizador ficou: encontra o último repositório do "
+            "GitHub em que ele trabalhou (ou o que ele disser), abre no VS Code e pede ao Claude Code "
+            "(o 'Claudinho') para continuar, com o git log/status como contexto. Usa para 'continua o que "
+            "estava a fazer', 'continua o trabalho no meu GitHub'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "Nome do repositório, se ele o disser; senão vazio."}},
+            "required": [],
+        },
+    },
+    {
         "name": "open_project",
         "description": (
             "Abre um projeto/repositório de código no VS Code pelo nome (ex.: 'TaskFlow'). Se o utilizador "
@@ -281,6 +295,8 @@ class ToolExecutor:
         if name == "music":
             (action,) = _require(args, "action")
             return media.music(action, str(args.get("query") or ""))
+        if name == "continue_work":
+            return projects.continue_work(str(args.get("name") or ""))
         if name == "open_project":
             (project,) = _require(args, "name")
             return projects.open_project(project, str(args.get("claude_prompt") or ""))

@@ -88,8 +88,63 @@ def has_claude_session(project: Path) -> bool:
     return sessions.is_dir() and any(d.name.lower() == encoded for d in sessions.iterdir())
 
 
-def open_project(name: str, claude_prompt: str = "") -> str:
-    project = find_project(name)
+def _git(project: Path, *args: str) -> str:
+    try:
+        return subprocess.run(
+            ["git", *args], cwd=project, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def last_activity(project: Path) -> float:
+    """Quando mexeste por último no repositório: último commit ou última alteração no índice/ficheiros."""
+    # Não usamos .git/index: o próprio "git status" atualiza-o, o que baralhava a ordem.
+    times = []
+    last_commit = _git(project, "log", "-1", "--format=%ct")
+    if last_commit.isdigit():
+        times.append(float(last_commit))
+    for changed in _git(project, "--no-optional-locks", "status", "--porcelain").splitlines()[:30]:
+        path = project / changed[3:].strip().strip('"')
+        if path.exists():
+            times.append(path.stat().st_mtime)
+    return max(times, default=0.0)
+
+
+def last_worked_project(projects: list[Path] | None = None) -> Path | None:
+    repos = [p for p in (list_projects() if projects is None else projects) if (p / ".git").exists()]
+    return max(repos, key=last_activity, default=None)
+
+
+def work_context(project: Path) -> str:
+    """Resumo do estado do repositório para o Claude Code saber onde ficaste."""
+    branch = _git(project, "branch", "--show-current") or "?"
+    status = _git(project, "--no-optional-locks", "status", "--short")
+    commits = _git(project, "log", "-5", "--format=%h %ar %s")
+    parts = [f"Branch: {branch}."]
+    if commits:
+        parts.append("Últimos commits:\n" + commits)
+    parts.append("Alterações por guardar:\n" + status if status else "Sem alterações por guardar.")
+    return "\n".join(parts)
+
+
+def continue_work(name: str = "") -> str:
+    """Abre o último repositório em que trabalhaste (ou o `name`) e pede ao Claude Code para continuar."""
+    project = find_project(name) if name.strip() else last_worked_project()
+    if not project:
+        names = ", ".join(p.name for p in list_projects()[:15])
+        return f"Não encontrei em que repositório estavas a trabalhar. Diz-me qual: {names or 'nenhum encontrado'}."
+    prompt = (
+        "Continua o trabalho onde fiquei neste repositório. Vê o git log, o git status e os ficheiros "
+        "alterados recentemente para perceber o que estava a fazer, diz-me em poucas linhas o que vais "
+        "fazer e continua.\n\nEstado atual:\n" + work_context(project)
+    )
+    return open_project(str(project.name), prompt, project=project)
+
+
+def open_project(name: str, claude_prompt: str = "", project: Path | None = None) -> str:
+    project = project or find_project(name)
     if not project and _fold(name) in {"vscode", "visualstudiocode", "code", "vs", ""}:
         # "abre o VS Code" sem projeto: abre só o editor.
         code = vscode_executable()

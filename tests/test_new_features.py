@@ -155,3 +155,39 @@ def test_verify_detects_failures_even_without_error_flag():
     assert not check.ok and len(check.failures) == 2
     assert check.spoken() == "Terminei, mas nem tudo correu bem: Carreguei no play, mas o Spotify não começou a tocar e mais 1."
     assert verify([]) is None
+
+
+# --- continuar o trabalho no GitHub ------------------------------------------
+
+import subprocess  # noqa: E402
+import time  # noqa: E402
+
+from jarvis.actions import projects  # noqa: E402
+
+
+def _repo(path, message):
+    path.mkdir()
+    run = lambda *a: subprocess.run(["git", *a], cwd=path, capture_output=True, check=True)  # noqa: E731
+    run("init", "-q"); run("config", "user.email", "t@t"); run("config", "user.name", "t")
+    (path / "a.txt").write_text("x"); run("add", "."); run("commit", "-qm", message)
+    return path
+
+
+def test_last_worked_project_and_context(tmp_path):
+    old = _repo(tmp_path / "Antigo", "primeiro")
+    time.sleep(1.1)
+    new = _repo(tmp_path / "Novo", "adiciona login")
+    (new / "login.py").write_text("# por acabar")
+    assert projects.last_worked_project([old, new, tmp_path / "sem_git"]) == new
+    context = projects.work_context(new)
+    assert "adiciona login" in context and "login.py" in context
+
+
+def test_continue_work_passes_context_to_claude(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "TaskFlow", "dashboard")
+    calls = []
+    monkeypatch.setattr(projects, "last_worked_project", lambda: repo)
+    monkeypatch.setattr(projects, "open_project", lambda name, prompt, project=None: calls.append((name, prompt, project)) or "ok")
+    projects.continue_work()
+    name, prompt, project = calls[0]
+    assert project == repo and "Continua o trabalho" in prompt and "dashboard" in prompt

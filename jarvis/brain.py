@@ -22,6 +22,7 @@ Claude na web); "diz ao Claudinho para..." num projeto é o claude_prompt do ope
 - vídeos: play_video (entra no YouTube, ou no TikTok se ele disser TikTok, e pesquisa lá o vídeo) \
 — nunca web_search para vídeos;
 - música no Spotify: music (play/pause/next/previous);
+- continuar o trabalho de programação onde ficou (continue_work);
 - criar imagens, código ou textos com uma IA na web: ask_ai (imagens -> ChatGPT, código -> Claude);
 - abrir pastas, ficheiros e Definições do Windows (open_path);
 - pesquisar no Google (web_search);
