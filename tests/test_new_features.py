@@ -325,3 +325,48 @@ def test_liked_words():
 def test_music_args(args, request_text, expected):
     from jarvis.tools import music_args
     assert music_args(args, request_text) == expected
+
+
+# --- mensagens (Discord separado, redes sociais) e janelas ------------------------------
+
+from jarvis.actions import social, windows  # noqa: E402
+from jarvis.actions.desktop_chat import discord_sections, format_discord_sections  # noqa: E402
+
+
+def test_discord_sections_split_friends_groups_servers():
+    home = ["Mensagens diretas", "2 menções, Rafosto", "1 menção, Broke bois"]
+    servers = ["226 menções, Shadow Greenville Roleplay", "Mensagens não lidas, Roblox Car Scene",
+               "No Hesi, FlaviBot.xyz, ..., pasta , 362 menções não lidas", "Greenville",
+               "1.117 menções, Connecticut State Roleplay"]
+    dms = ["Amigos4", "Solicitações de mensagens1", "RafostoTag do servidor: PAY", "Broke bois3 membros"]
+    s = discord_sections(home, servers, dms)
+    assert s["friends"] == [("Rafosto", 2)]
+    assert s["groups"] == [("Broke bois", 1)]
+    assert s["requests"] == 1
+    assert ("Connecticut State Roleplay", 1117) in s["servers"] and len(s["servers"]) == 3
+    text = format_discord_sections(s)
+    assert "Amigos: Rafosto (2)" in text and "Grupos: Broke bois" in text
+    assert "3 servidores" in text and text.index("Connecticut") < text.index("Shadow")
+
+
+def test_social_title_reading():
+    assert "3" in social.read_title("(3) Instagram", "Instagram")
+    assert "sessão" in social.read_title("Iniciar sessão • Instagram", "Instagram")
+    assert "nada de novo" in social.read_title("Mensagens | LinkedIn", "LinkedIn")
+
+
+def test_social_check_closes_only_its_tab(monkeypatch):
+    import pywinauto.keyboard
+
+    keys = []
+    monkeypatch.setattr(social.system, "open_url", lambda url: None)
+    monkeypatch.setattr(pywinauto.keyboard, "send_keys", keys.append)
+    out = social.check_site("instagram", wait_title=lambda: "(2) Instagram", settle=0)
+    assert "2" in out and keys == ["^w"]
+
+
+def test_window_matching():
+    assert windows.matches("VALORANT", "VALORANT  ", r"C:\Riot\VALORANT-Win64-Shipping.exe")
+    assert windows.matches("Spotify", "Spotify Premium", "Spotify.exe")
+    assert not windows.matches("Spotify", "Jarvis — Spotify", "python.exe")
+    assert not windows.matches("Discord", "Opera", "opera.exe")

@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import ai_web, charts, classroom, files, media, projects, roblox, screen, steam, system, web
+from jarvis.actions import ai_web, charts, classroom, files, media, projects, roblox, screen, social, steam, system, web
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -219,7 +219,8 @@ TOOL_SPECS = [
     {
         "name": "check_messages",
         "description": (
-            "Vê se o utilizador tem mensagens novas/por ler no WhatsApp e no Discord (sem as abrir): quem "
+            "Vê se o utilizador tem mensagens novas/por ler no WhatsApp, Discord (amigos, grupos e servidores), "
+            "Instagram, TikTok e LinkedIn (sem as abrir): quem "
             "mandou, o quê e onde. Usa para 'alguém me mandou mensagem?', 'tenho mensagens novas?'. Depois "
             "pergunta se ele quer responder a alguém."
         ),
@@ -587,7 +588,12 @@ class ToolExecutor:
         if name == "classroom_choose":  # só chamado pelo Brain, com a resposta à pergunta anterior
             return self.classroom.choose(*_require(args, "choice"))
         if name == "check_messages":
-            return self.messenger.check_messages()
+            text = self.messenger.check_messages()
+            wanted = [k for k in social.SITES if k in request.lower()]
+            only_chats = any(w in request.lower() for w in ("whatsapp", "discord")) and not wanted
+            if not only_chats:
+                text += "\n" + "\n".join(social.check_all(wanted or tuple(social.SITES)))
+            return text
         if name == "web_answer":
             return web.answer(*_require(args, "question"))
         if name == "make_chart":

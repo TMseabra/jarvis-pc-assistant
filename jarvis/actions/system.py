@@ -13,7 +13,7 @@ from urllib.parse import quote_plus, urlparse
 from jarvis.config import config
 
 if sys.platform == "win32":
-    from jarvis.actions import games
+    from jarvis.actions import games, windows
 else:  # pragma: no cover - o Jarvis é feito para Windows
     games = None
 
@@ -166,7 +166,10 @@ def open_app(name: str) -> str:
                 from jarvis.actions import riot
 
                 product = next((a.split("=", 1)[1] for a in game.command if a.startswith("--launch-product=")), "")
-                return f"Abri {game.name}. {riot.press_play(product)}"
+                played = riot.press_play(product)
+                windows.focus_later(game.name, game=True)
+                return f"Abri {game.name}. {played}"
+            windows.focus_later(game.name, game=True)
             return f"Abri {game.name} ({game.source})."
 
         # Depois: atalho .lnk com o nome exato (mantém argumentos que o Menu Iniciar às vezes
@@ -190,6 +193,7 @@ def open_app(name: str) -> str:
             os.startfile(target)  # type: ignore[attr-defined]
         except OSError:
             return f"Não consegui abrir '{label}'."
+        windows.focus_later(label)
         return f"Abri {label}."
 
     if sys.platform == "darwin":

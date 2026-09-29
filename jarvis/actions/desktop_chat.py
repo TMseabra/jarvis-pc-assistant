@@ -126,6 +126,7 @@ def parse_discord_message(texts: list[tuple[str, str]]) -> tuple[str, str]:
 class DiscordDesktop(DesktopChat):
     name = "Discord"
     app_id = "com.squirrel.Discord.Discord"
+    opened_by_jarvis = False
 
     def _find_window(self):
         from pywinauto import Desktop
@@ -236,18 +237,89 @@ class DiscordDesktop(DesktopChat):
         return f"Mensagem enviada para {title} no Discord."
 
     def unread_summary(self, limit: int = 5) -> str:
-        """Conversas e servidores com mensagens por ler, pela barra lateral (sem abrir nada)."""
+        """Mensagens por ler, separadas em amigos, grupos e servidores (sem abrir conversas)."""
         window = self._find_window()
         if window is None:
             window = self.window()  # abre o Discord se estiver fechado
-        names = [t.element_info.name or "" for t in window.descendants(control_type="TreeItem")]
+            self.opened_by_jarvis = True
+        home, servers, seen_servers = [], [], False
+        tree = next(iter(window.descendants(control_type="Tree")), None)
+        for group in tree.children() if tree else []:
+            items = [t.element_info.name or "" for t in group.descendants(control_type="TreeItem")]
+            if (group.element_info.name or "") in ("Servidores", "Servers"):
+                servers, seen_servers = items, True
+            elif not seen_servers:  # antes dos servidores: "Mensagens diretas" e as conversas por ler
+                home += items
         dm_list = self._dm_list(window)
-        if dm_list:
-            names += [i.element_info.name or "" for i in dm_list.children(control_type="ListItem")]
-        unread = discord_unread(names)[:limit]
-        if not unread:
-            return "Discord: não tens mensagens por ler."
-        return "\n".join([f"Discord ({len(unread)} com mensagens por ler):"] + [f"- {u}" for u in unread])
+        dm_names = [i.element_info.name or "" for i in dm_list.descendants(control_type="ListItem")] if dm_list else []
+        return format_discord_sections(discord_sections(home, servers, dm_names), limit)
+
+    def close_if_opened(self) -> bool:
+        """Fecha o Discord se foi o Jarvis que o abriu para ver as mensagens."""
+        if not getattr(self, "opened_by_jarvis", False):
+            return False
+        self.opened_by_jarvis = False
+        window = self._find_window()
+        if window is not None:
+            window.close()
+        return True
+
+
+_MENTIONS = re.compile(r"(\d[\d.]*)\s+men[çc](?:ão|ões|ao|oes|tions?)(?:\s+não\s+lidas?)?", re.IGNORECASE)
+_HOME_NAMES = {"mensagens diretas", "direct messages"}
+
+
+def _mentions(name: str) -> int:
+    m = _MENTIONS.search(name)
+    return int(m.group(1).replace(".", "")) if m else 0
+
+
+def _strip_unread(name: str) -> str:
+    name = re.sub(r"(?:Mensagens não lidas|Unread messages?)\s*,?\s*", "", name, flags=re.I)
+    name = _MENTIONS.sub("", name)
+    return clean_discord_name(name.strip(" ,"))
+
+
+def discord_sections(home: list[str], servers: list[str], dm_names: list[str]) -> dict:
+    """Barra lateral do Discord -> {"friends": [(nome, n)], "groups": [...], "servers": [...], "requests": n}.
+    Mensagens diretas por ler aparecem como avatares junto de "Mensagens diretas"; os grupos têm
+    "N membros" na lista de conversas; as pastas de servidores ("..., pasta") são ignoradas (os
+    servidores lá dentro aparecem à parte)."""
+    group_names = {clean_discord_name(n) for n in dm_names if re.search(r"\d+\s*membros?$", n)}
+    friends, groups = [], []
+    for name in home:
+        if name.strip().lower() in _HOME_NAMES:
+            continue
+        who = _strip_unread(name)
+        if not who:
+            continue
+        (groups if who in group_names or "," in who else friends).append((who, _mentions(name)))
+    unread_servers = [
+        (_strip_unread(n), _mentions(n)) for n in servers
+        if "pasta" not in n and _DISCORD_UNREAD.search(n)
+    ]
+    requests = next((int(m.group(1)) for n in dm_names
+                     if (m := re.match(r"(?:Solicitações de mensagens|Message Requests)\s*(\d+)", n))), 0)
+    return {"friends": friends, "groups": groups, "servers": unread_servers, "requests": requests}
+
+
+def format_discord_sections(sections: dict, limit: int = 5) -> str:
+    def names(items):
+        return ", ".join(f"{n} ({c})" if c else n for n, c in items[:limit])
+
+    lines = ["Discord:"]
+    lines.append(f"- 👤 Amigos: {names(sections['friends'])}" if sections["friends"]
+                 else "- 👤 Nenhum amigo te mandou mensagem.")
+    if sections["groups"]:
+        lines.append(f"- 👥 Grupos: {names(sections['groups'])}")
+    if sections["requests"]:
+        lines.append(f"- ✉️ {sections['requests']} pedido(s) de mensagem de quem não é teu amigo.")
+    servers = sections["servers"]
+    if servers:
+        top = sorted(servers, key=lambda s: s[1], reverse=True)
+        lines.append(f"- 🌐 Comunidades: {len(servers)} servidores com mensagens por ler"
+                     + (f" (mais menções: {names([s for s in top if s[1]])})" if top[0][1] else "") + ".")
+    return "\n".join(lines)
 
 
 # --- WhatsApp ----------------------------------------------------------------
@@ -559,6 +631,11 @@ class ChatRouter:
                 parts.append(dc.unread_summary(limit))
             except Exception as exc:
                 parts.append(f"Discord: não consegui ver ({exc}).")
+            try:
+                if dc.close_if_opened():
+                    parts.append("(fechei o Discord outra vez)")
+            except Exception:
+                pass
         if not parts:
             return "Não encontrei o WhatsApp nem o Discord de desktop instalados."
         return "\n".join(parts)

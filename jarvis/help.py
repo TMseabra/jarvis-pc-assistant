@@ -12,7 +12,7 @@ HELP_TEXT = """Olá, sou o Jarvis. Isto é o que sei fazer:
 🎮 Steam: "qual é o jogo com mais horas nos meus favoritos?"
 📁 PC: "abre as transferências", "abre o meu CV", "o bluetooth não funciona"
 📸 "manda-me um print do ecrã"  ·  🔒 "bloqueia o PC"
-📬 "alguém me mandou mensagem?" (WhatsApp e Discord)
+📬 "alguém me mandou mensagem?" (WhatsApp, Discord separado em amigos/grupos/servidores, Instagram, TikTok e LinkedIn; fecho o que abri)
 🌍 "quem ganhou o jogo do Benfica ontem?" (pesquisa na net; precisa da chave grátis do Gemini)
 🎓 "faz um trabalho" (Classroom: escolhes a turma e o trabalho, mando tudo ao Claude com PowerPoint)
 📊 "faz um gráfico das minhas horas na Steam", "faz um gráfico com…"

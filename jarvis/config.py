@@ -63,6 +63,8 @@ class Config:
     browser: str = field(default_factory=lambda: _env("JARVIS_BROWSER", "default"))
     # WhatsApp/Discord: "auto" usa a app de desktop se estiver instalada, senão a versão web;
     # "desktop" ou "web" forçam uma delas. (O Telegram usa sempre a versão web.)
+    # Ao abrir uma app, maximizá-la e pô-la à frente (JARVIS_MAXIMIZE=0 desliga).
+    maximize_windows: bool = field(default_factory=lambda: _env("JARVIS_MAXIMIZE", "1") not in ("0", "false", "nao"))
     messaging: str = field(default_factory=lambda: _env("JARVIS_MESSAGING", "auto").lower())
     # Telegram: token do bot (@BotFather) e IDs de utilizador autorizados (separados por vírgulas).
     telegram_token: str = field(default_factory=lambda: os.getenv("JARVIS_TELEGRAM_TOKEN", ""))
