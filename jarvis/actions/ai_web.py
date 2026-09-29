@@ -131,6 +131,26 @@ def _type_when_focused(title_word: str, text: str, timeout: float = 15.0) -> boo
     return False
 
 
+def send_to_claude(prompt: str) -> bool:
+    """Abre uma conversa nova no Claude e cola lá `prompt` (pode ser longo: vai pela área de
+    transferência, não pelo link). Se não conseguir, deixa o texto copiado para colares tu."""
+    open_url("https://claude.ai/new")
+    if _type_when_focused("Claude", prompt, timeout=20):
+        return True
+    try:
+        import win32clipboard
+
+        win32clipboard.OpenClipboard()
+        try:
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, prompt)
+        finally:
+            win32clipboard.CloseClipboard()
+    except Exception:
+        pass
+    return False
+
+
 # --- listar e abrir conversas --------------------------------------------------------
 
 _TITLE_SUFFIX = {"claude": (" - Claude", " | Claude"), "chatgpt": (" - ChatGPT", " | ChatGPT")}

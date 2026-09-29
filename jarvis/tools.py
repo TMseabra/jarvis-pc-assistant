@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import ai_web, charts, files, media, projects, roblox, screen, steam, system, web
+from jarvis.actions import ai_web, charts, classroom, files, media, projects, roblox, screen, steam, system, web
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -200,6 +200,16 @@ TOOL_SPECS = [
             "properties": {"monitor": {"type": "integer", "description": "0 = todos os ecrãs, 1, 2... = um ecrã."}},
             "required": [],
         },
+    },
+    {
+        "name": "classroom_start",
+        "description": (
+            "Abre o Google Classroom do utilizador para fazer um trabalho da escola: lista as turmas, ele "
+            "escolhe uma, depois os 10 trabalhos mais recentes, e o escolhido vai todo (enunciado e anexos) "
+            "para o Claude, com pedido de PowerPoint. Usa para 'faz um trabalho', 'abre o classroom', "
+            "'que trabalhos tenho?'."
+        ),
+        "parameters": {"type": "object", "properties": {}, "required": []},
     },
     {
         "name": "lock_pc",
@@ -503,6 +513,7 @@ class ToolExecutor:
         self.confirm = confirm
         self.confirm_ai: ConfirmSend | None = None  # mostra respostas escritas pelo Jarvis antes de enviar
         self.compose: Callable[[str, str], str] | None = None  # escreve uma resposta (posto pelo Brain)
+        self.classroom = classroom.ClassroomFlow(open_url=system.open_url, send_to_claude=ai_web.send_to_claude)
 
     @property
     def messenger(self) -> Messenger:
@@ -571,6 +582,10 @@ class ToolExecutor:
             return text
         if name == "lock_pc":
             return system.lock_pc()
+        if name == "classroom_start":
+            return self.classroom.start()
+        if name == "classroom_choose":  # só chamado pelo Brain, com a resposta à pergunta anterior
+            return self.classroom.choose(*_require(args, "choice"))
         if name == "check_messages":
             return self.messenger.check_messages()
         if name == "web_answer":

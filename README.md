@@ -92,6 +92,14 @@ Pela linha de comandos: `.venv\Scripts\python -m jarvis.main --modo texto|falar|
   - Ações sensíveis (lançar o Claude Code a mexer em código; no futuro apagar ficheiros, `git push`, comandos) pedem confirmação com botões ✅/❌. Sem resposta em 2 minutos, não faz.
   - Sempre ligado: o assistente oferece-se para arrancar com o Windows em segundo plano (`--servico`, sem janela). Só um Jarvis lê o bot de cada vez.
 
+### Google Classroom (trabalhos da escola)
+
+Diz "faz um trabalho": o Jarvis lista as tuas turmas (1, 2, 3…), escolhes uma, mostra os 10
+trabalhos mais recentes, escolhes um e ele abre-o no Classroom e manda ao Claude o enunciado e
+o texto dos anexos (PDF, Docs, Slides), a pedir o trabalho feito, um PowerPoint e um prompt para
+o Claude Design. Configurar uma vez com `Jarvis.bat --classroom` (guia passo a passo no Google
+Cloud; acesso só de leitura; as chaves ficam em `.jarvis/`).
+
 ### Voz
 
 - **Gravação:** deteção de voz (Silero VAD), não o volume. O ruído de fundo (ventoinhas, jogo) não conta como fala e as pausas não cortam a frase.

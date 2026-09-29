@@ -141,6 +141,12 @@ _HELP_REQUEST = re.compile(
     r"^\W*(?:ajuda|/ajuda|help|comandos)\W*$",
     re.IGNORECASE,
 )
+# "faz um trabalho", "abre o classroom", "que trabalhos tenho?"
+_CLASSROOM_REQUEST = re.compile(
+    r"classroom|\bfaz(?:er|-me|es)?\s+(?:um|o|uns|os)\s+trabalhos?\b|\btrabalhos?\s+(?:da|de)\s+(?:escola|turma)|"
+    r"que\s+trabalhos\s+tenho",
+    re.IGNORECASE,
+)
 ACTION_LOCK = threading.RLock()
 
 
@@ -183,7 +189,18 @@ class Brain:
                     request="",  # o texto é exatamente o que foi escrito
                 )
                 return result.content if not result.is_error else f"Não enviei: {result.content}"
+        flow = getattr(self.executor, "classroom", None)
+        if flow is not None and flow.waiting:
+            if _CANCEL.match(text):
+                flow.cancel()
+                return "Ok, deixei o Classroom."
+            if not is_action_request(text) or re.fullmatch(r"\W*\d+\W*", text):
+                result = self._run_tool(ToolCall("classroom_choose", {"choice": text.strip()}), request=text)
+                return result.content
+            flow.cancel()  # outro pedido: segue normalmente
         # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
+        if _CLASSROOM_REQUEST.search(text):
+            return self._run_tool(ToolCall("classroom_start", {}), request=text).content
         if _SCREENSHOT_REQUEST.search(text):
             result = self._run_tool(ToolCall("screenshot", {}), request=text)
             return result.content

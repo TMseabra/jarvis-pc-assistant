@@ -69,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--voz", action="store_true", help="atalho para --modo maos-livres")
     parser.add_argument("--testar-jarvis", action="store_true", help="testa a deteção do 'Hey Jarvis'")
     parser.add_argument("--telegram", action="store_true", help="liga o Jarvis ao teu bot do Telegram")
+    parser.add_argument("--classroom", action="store_true", help="liga o Jarvis ao teu Google Classroom")
     parser.add_argument("--servico", action="store_true", help="só o Telegram, em segundo plano")
     args = parser.parse_args(argv)
 
@@ -76,6 +77,10 @@ def main(argv: list[str] | None = None) -> int:
         from jarvis.telegram_setup import run as setup_telegram
 
         return setup_telegram()
+    if args.classroom:
+        from jarvis.classroom_setup import run as setup_classroom
+
+        return setup_classroom()
     if args.servico:
         setup_log()
         from jarvis.remote import run_service

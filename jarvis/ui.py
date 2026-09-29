@@ -37,7 +37,7 @@ _LOGO = r"""
 _ICONS = {
     "open_app": "🚀", "open_website": "🌐", "web_search": "🔎", "play_video": "▶️ ",
     "music": "🎵", "open_project": "💻", "read_messages": "📨", "send_message": "💬",
-    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠", "reply_last_message": "↩️ ", "close_app": "✖️ ", "steam_stats": "🎮", "screenshot": "📸", "lock_pc": "🔒", "check_messages": "📬", "web_answer": "🌍", "make_chart": "📊", "list_ai_chats": "💭", "open_ai_chat": "💭", "play_roblox": "🟥", "continue_ai_chat": "💭", "open_watched_video": "🕘",
+    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠", "reply_last_message": "↩️ ", "close_app": "✖️ ", "steam_stats": "🎮", "screenshot": "📸", "lock_pc": "🔒", "classroom_start": "🎓", "classroom_choose": "🎓", "check_messages": "📬", "web_answer": "🌍", "make_chart": "📊", "list_ai_chats": "💭", "open_ai_chat": "💭", "play_roblox": "🟥", "continue_ai_chat": "💭", "open_watched_video": "🕘",
 }
 
 
@@ -68,6 +68,8 @@ def tool_label(call: ToolCall) -> str:
         "open_ai_chat": f"A abrir a conversa “{a.get('which', '')}”",
         "screenshot": "A tirar um print do ecrã",
         "lock_pc": "A bloquear o PC",
+        "classroom_start": "A abrir o Classroom",
+        "classroom_choose": "Classroom",
         "check_messages": "A ver se tens mensagens novas no WhatsApp e no Discord",
         "web_answer": f"A pesquisar na internet: “{a.get('question', '')}”",
         "make_chart": f"A fazer o gráfico “{a.get('title', '')}”",

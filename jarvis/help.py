@@ -14,6 +14,7 @@ HELP_TEXT = """Olá, sou o Jarvis. Isto é o que sei fazer:
 📸 "manda-me um print do ecrã"  ·  🔒 "bloqueia o PC"
 📬 "alguém me mandou mensagem?" (WhatsApp e Discord)
 🌍 "quem ganhou o jogo do Benfica ontem?" (pesquisa na net; precisa da chave grátis do Gemini)
+🎓 "faz um trabalho" (Classroom: escolhes a turma e o trabalho, mando tudo ao Claude com PowerPoint)
 📊 "faz um gráfico das minhas horas na Steam", "faz um gráfico com…"
 
 No Telegram: /ajuda mostra isto, /reiniciar carrega a versão mais recente do Jarvis."""
