@@ -8,7 +8,8 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
-from jarvis import followups, music_intents, overlay
+from jarvis import followups, memes, music_intents, overlay
+from jarvis.power_intents import parse_power
 from jarvis.actions.find import parse_image_request, parse_links_request
 from jarvis.actions.site_search import parse_refine, parse_site_search
 from jarvis.tools import (
@@ -220,7 +221,19 @@ class Brain:
                 result = self._run_tool(ToolCall("classroom_choose", {"choice": text.strip()}), request=text)
                 return result.content
             flow.cancel()  # outro pedido: segue normalmente
+        memes_flow = getattr(self.executor, "memes", None)
+        if memes_flow is not None and memes_flow.waiting:
+            if _CANCEL.match(text):
+                memes_flow.cancel()
+                return "Ok, sem memes."
+            if re.fullmatch(r"\W*(?:(?:o|a|mete|p[oõ]e|quero)\s+)*(?:\d+|primeiro|segundo|terceiro|quarto|quinto|outros?|mais)\W*", text,
+                            re.IGNORECASE):
+                return self._run_tool(ToolCall("meme_choose", {"choice": text.strip()}), request=text).content
+            memes_flow.cancel()  # outro pedido
         # "sim" / "abre elas" / "o LinkedIn" / "2" depois de o Jarvis oferecer abrir alguma coisa.
+        if self.followups and _CANCEL.match(text):
+            self.followups = []
+            return "Ok, não fiz nada."
         hit = followups.match(text, self.followups)
         if hit:
             kind, payload = hit
@@ -231,6 +244,14 @@ class Brain:
             return "\n".join(r.content for r in results)
         self.followups = []  # a oferta anterior já não se aplica
         # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
+        power = parse_power(text)
+        if power:
+            action, question = power
+            if action == "cancel":
+                return self._run_tool(ToolCall("power", {"action": "cancel"}), request=text).content
+            call = ToolCall("lock_pc", {}) if action == "lock" else ToolCall("power", {"action": action})
+            self.followups = [(action, call)]
+            return question + " (sim/não)"
         music = music_intents.parse_music(text)
         if music:
             return self._music(text, *music)
@@ -240,6 +261,10 @@ class Brain:
             return self._run_tool(ToolCall("site_search", {"site": site, "query": query}), request=text).content
         if _CLASSROOM_REQUEST.search(text):
             return self._run_tool(ToolCall("classroom_start", {}), request=text).content
+        if memes.JUMPSCARE_REQUEST.search(text):
+            return self._run_tool(ToolCall("jumpscare", {}), request=text).content
+        if memes.MEME_REQUEST.search(text):
+            return self._run_tool(ToolCall("meme_start", {}), request=text).content
         on_screen = overlay.parse_request(text)
         if on_screen:
             return self._run_tool(ToolCall("show_on_screen", {"text": on_screen}), request=text).content

@@ -1,4 +1,4 @@
-"""Onde ficam as coisas que o Jarvis cria (fotos, prints, gráficos): Imagens\\Jarvis\\<tipo>.
+"""Onde ficam as coisas que o Jarvis cria (fotos, prints, gráficos): Ambiente de Trabalho\\Jarvis\\<tipo>.
 
 Assim sabes sempre onde está tudo. Ficheiros com mais de JARVIS_KEEP_DAYS dias (7 por omissão;
 0 = nunca apagar) são apagados sozinhos quando o Jarvis guarda um novo.
@@ -11,18 +11,18 @@ from pathlib import Path
 from jarvis.config import config
 
 
-def pictures_dir() -> Path:
+def desktop_dir() -> Path:
     try:
         from win32com.shell import shell, shellcon
 
-        return Path(shell.SHGetFolderPath(0, shellcon.CSIDL_MYPICTURES, None, 0))
+        return Path(shell.SHGetFolderPath(0, shellcon.CSIDL_DESKTOPDIRECTORY, None, 0))
     except Exception:
-        return Path.home() / "Pictures"
+        return Path.home() / "Desktop"
 
 
 def base_dir() -> Path:
     custom = os.getenv("JARVIS_OUTPUT_DIR")
-    return Path(custom) if custom else pictures_dir() / "Jarvis"
+    return Path(custom) if custom else desktop_dir() / "Jarvis"
 
 
 def folder(kind: str) -> Path:

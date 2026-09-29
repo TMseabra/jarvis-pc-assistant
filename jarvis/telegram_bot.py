@@ -9,6 +9,7 @@ Segurança:
 """
 
 import queue
+import re
 import secrets
 import threading
 import time
@@ -66,6 +67,53 @@ class TelegramAPI:
         raise RuntimeError(f"Telegram: não consegui enviar {path.name}: {error}")
 
 
+    def send_photo_bytes(self, chat: int, data: bytes, caption: str = "") -> dict:
+        response = self.http.post(API.format(token=self.token, method="sendPhoto"),
+                                  data={"chat_id": chat, "caption": caption},
+                                  files={"photo": ("ecra.jpg", data, "image/jpeg")}, timeout=60)
+        result = response.json()
+        if not result.get("ok"):
+            raise RuntimeError(result.get("description"))
+        return result["result"]
+
+    def edit_photo_bytes(self, chat: int, message_id: int, data: bytes, caption: str = "") -> dict:
+        import json
+
+        media = {"type": "photo", "media": "attach://ecra", "caption": caption}
+        response = self.http.post(API.format(token=self.token, method="editMessageMedia"),
+                                  data={"chat_id": chat, "message_id": message_id, "media": json.dumps(media)},
+                                  files={"ecra": ("ecra.jpg", data, "image/jpeg")}, timeout=60)
+        result = response.json()
+        if not result.get("ok"):
+            raise RuntimeError(result.get("description"))
+        return result["result"]
+
+
+LIVE_SECONDS = 60
+LIVE_REQUEST = re.compile(
+    r"(?:ecr[aã]|tela|pc|computador).*(?:ao\s+vivo|em\s+direto|tempo\s+real|\blive\b)|"
+    r"(?:ao\s+vivo|em\s+direto|tempo\s+real|\blive\b).*(?:ecr[aã]|tela|pc|computador)",
+    re.IGNORECASE,
+)
+
+
+def grab_screen_jpeg(width: int = 1280, quality: int = 60) -> bytes:
+    """Print do ecrã principal em JPEG pequeno (rápido de enviar)."""
+    import io
+
+    import mss
+    from PIL import Image
+
+    with mss.mss() as sct:
+        shot = sct.grab(sct.monitors[1])
+    img = Image.frombytes("RGB", shot.size, shot.rgb)
+    if img.width > width:
+        img = img.resize((width, int(img.height * width / img.width)))
+    buffer = io.BytesIO()
+    img.save(buffer, "JPEG", quality=quality)
+    return buffer.getvalue()
+
+
 def parse_allowed_ids(raw: str) -> set[int]:
     return {int(x) for x in raw.replace(";", ",").split(",") if x.strip().lstrip("-").isdigit()}
 
@@ -85,6 +133,7 @@ class TelegramBot:
         self.jobs: queue.Queue = queue.Queue()
         self._pending: dict[str, dict] = {}  # confirmações à espera de resposta
         self.stop = threading.Event()
+        self.live_stop = threading.Event()  # /parar acaba o ecrã ao vivo
 
     # --- receber -------------------------------------------------------------
 
@@ -131,7 +180,39 @@ class TelegramBot:
             self.api.call("getUpdates", offset=self.offset, timeout=0)
             updates.restart()
             return
+        if text.lower() in ("/parar", "/stop", "para o ecrã", "para o ecra", "parar"):
+            self.live_stop.set()
+            if text.startswith("/"):
+                return
+        if text.lower() in ("/aovivo", "/ecra", "/ecrã") or LIVE_REQUEST.search(text):
+            self.live_stop.clear()
+            threading.Thread(target=self.live_screen, args=(chat,), daemon=True, name="ecra-ao-vivo").start()
+            return
         self.jobs.put((text, chat))
+
+    # --- ecrã ao vivo ----------------------------------------------------------
+
+    def live_screen(self, chat: int, seconds: float = LIVE_SECONDS, interval: float = 2.0, grab=None):
+        """Manda uma foto do ecrã e vai-a atualizando (quase como um vídeo) durante `seconds`."""
+        grab = grab or grab_screen_jpeg
+        try:
+            first = self.api.send_photo_bytes(chat, grab(), f"🔴 Ecrã ao vivo ({int(seconds)} s). /parar para acabar.")
+        except Exception as exc:
+            self.send(chat, f"Não consegui mostrar o ecrã: {exc}")
+            return
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and not self.live_stop.wait(interval):
+            try:
+                left = int(end - time.monotonic())
+                self.api.edit_photo_bytes(chat, first["message_id"], grab(),
+                                          f"🔴 Ecrã ao vivo ({left} s). /parar para acabar.")
+            except Exception as exc:  # ex.: imagem igual à anterior ("message is not modified")
+                log.debug("ecrã ao vivo: %s", exc)
+        try:
+            self.api.call("editMessageCaption", chat_id=chat, message_id=first["message_id"],
+                          caption="⏹ Fim do ecrã ao vivo. Manda /aovivo para ver outra vez.")
+        except Exception:
+            pass
 
     def _on_callback(self, callback: dict):
         user = (callback.get("from") or {}).get("id")

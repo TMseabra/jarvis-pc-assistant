@@ -202,6 +202,18 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "meme_start",
+        "description": "Mostra 5 memes para o utilizador escolher um e pô-lo em grande no ecrã do PC. "
+                       "Usa para 'mete um meme na tela do PC'.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "jumpscare",
+        "description": "Assusta quem está ao PC: cara assustadora em ecrã inteiro com um grito. "
+                       "Usa para 'dá um jumpscare na tela do PC'.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    {
         "name": "show_on_screen",
         "description": "Mostra um texto em grande e animado no ecrã do PC. Usa para 'diz olá no ecrã do PC'.",
         "parameters": {
@@ -618,6 +630,9 @@ class ToolExecutor:
         self.confirm = confirm
         self.confirm_ai: ConfirmSend | None = None  # mostra respostas escritas pelo Jarvis antes de enviar
         self.compose: Callable[[str, str], str] | None = None  # escreve uma resposta (posto pelo Brain)
+        from jarvis.memes import MemeFlow
+
+        self.memes = MemeFlow()
         self.classroom = classroom.ClassroomFlow(open_url=system.open_url, send_to_claude=ai_web.send_to_claude)
 
     @property
@@ -687,6 +702,16 @@ class ToolExecutor:
             return text
         if name == "lock_pc":
             return system.lock_pc()
+        if name == "power":  # só pelo Brain, depois de o utilizador dizer "sim"
+            return system.power(*_require(args, "action"))
+        if name == "meme_start":
+            return self.memes.start()
+        if name == "meme_choose":  # só chamado pelo Brain, com a resposta à lista
+            return self.memes.choose(*_require(args, "choice"))
+        if name == "jumpscare":
+            from jarvis import memes
+
+            return memes.jumpscare()
         if name == "show_on_screen":
             from jarvis import overlay
 

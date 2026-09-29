@@ -307,6 +307,29 @@ def lock_pc() -> str:
     return "Bloqueei o PC."
 
 
+_POWER = {
+    "shutdown": (["shutdown", "/s", "/t", "15"], "O PC vai desligar-se daqui a 15 segundos."),
+    "restart": (["shutdown", "/r", "/t", "15"], "O PC vai reiniciar daqui a 15 segundos."),
+    "cancel": (["shutdown", "/a"], "Cancelei: o PC já não se vai desligar."),
+}
+
+
+def power(action: str) -> str:
+    """Desligar / reiniciar (com 15 s para cancelar), suspender, ou cancelar."""
+    if action == "sleep":
+        subprocess.Popen(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
+        return "A pôr o PC em suspensão."
+    if action not in _POWER:
+        raise ValueError(f"Ação desconhecida: {action}")
+    command, message = _POWER[action]
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        if action == "cancel":
+            return "Não havia nenhum desligar marcado."
+        return f"Não consegui: {(result.stderr or result.stdout).strip()}"
+    return message + (" Diz \"cancela o desligar\" se mudares de ideias." if action != "cancel" else "")
+
+
 def _process_exe(pid: int) -> str:
     import win32api
     import win32con

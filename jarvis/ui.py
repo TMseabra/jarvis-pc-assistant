@@ -37,7 +37,7 @@ _LOGO = r"""
 _ICONS = {
     "open_app": "🚀", "open_website": "🌐", "web_search": "🔎", "play_video": "▶️ ",
     "music": "🎵", "open_project": "💻", "read_messages": "📨", "send_message": "💬",
-    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠", "reply_last_message": "↩️ ", "close_app": "✖️ ", "steam_stats": "🎮", "screenshot": "📸", "lock_pc": "🔒", "classroom_start": "🎓", "site_search": "🔎", "web_links": "🔗", "show_on_screen": "✨", "show_image": "🖼", "classroom_choose": "🎓", "check_messages": "📬", "web_answer": "🌍", "make_chart": "📊", "list_ai_chats": "💭", "open_ai_chat": "💭", "play_roblox": "🟥", "continue_ai_chat": "💭", "open_watched_video": "🕘",
+    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠", "reply_last_message": "↩️ ", "close_app": "✖️ ", "steam_stats": "🎮", "screenshot": "📸", "lock_pc": "🔒", "classroom_start": "🎓", "site_search": "🔎", "web_links": "🔗", "show_on_screen": "✨", "meme_start": "😂", "meme_choose": "😂", "jumpscare": "👻", "power": "⏻", "show_image": "🖼", "classroom_choose": "🎓", "check_messages": "📬", "web_answer": "🌍", "make_chart": "📊", "list_ai_chats": "💭", "open_ai_chat": "💭", "play_roblox": "🟥", "continue_ai_chat": "💭", "open_watched_video": "🕘",
 }
 
 
@@ -69,6 +69,11 @@ def tool_label(call: ToolCall) -> str:
         "screenshot": "A tirar um print do ecrã",
         "lock_pc": "A bloquear o PC",
         "classroom_start": "A abrir o Classroom",
+        "meme_start": "A ir buscar memes",
+        "meme_choose": "A pôr o meme no ecrã",
+        "jumpscare": "Jumpscare!",
+        "power": {"shutdown": "A desligar o PC", "restart": "A reiniciar o PC", "sleep": "A suspender o PC",
+                  "cancel": "A cancelar o desligar"}.get(a.get("action", ""), "PC"),
         "show_on_screen": f"A mostrar “{a.get('text', '')}” no ecrã",
         "web_links": f"A procurar links: “{a.get('query', '')}”",
         "show_image": f"A procurar uma foto de {a.get('query', '')}",

@@ -177,3 +177,31 @@ def test_restart_acknowledges_update_and_ignores_old_restart(monkeypatch):
     assert restarts == [1]
     acks = [p for m, p in calls if m == "getUpdates" and p.get("timeout") == 0]
     assert acks and acks[-1]["offset"] == bot.offset
+
+
+# --- ecrã ao vivo -------------------------------------------------------------
+
+def test_live_screen_updates_same_message():
+    from jarvis.telegram_bot import LIVE_REQUEST, TelegramBot
+
+    class API:
+        def __init__(self):
+            self.sent, self.edits, self.calls = [], [], []
+
+        def send_photo_bytes(self, chat, data, caption=""):
+            self.sent.append((chat, data))
+            return {"message_id": 7}
+
+        def edit_photo_bytes(self, chat, message_id, data, caption=""):
+            self.edits.append((message_id, data))
+
+        def call(self, method, **params):
+            self.calls.append(method)
+
+    api = API()
+    bot = TelegramBot(api, {1}, handle=lambda text, chat: "")
+    bot.live_screen(5, seconds=0.25, interval=0.05, grab=lambda: b"jpg")
+    assert api.sent == [(5, b"jpg")] and api.edits and all(m == 7 for m, _ in api.edits)
+    assert api.calls == ["editMessageCaption"]
+    assert LIVE_REQUEST.search("mostra-me o ecrã ao vivo") and LIVE_REQUEST.search("quero ver o pc em tempo real")
+    assert not LIVE_REQUEST.search("manda-me um print do ecrã")
