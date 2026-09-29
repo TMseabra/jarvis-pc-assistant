@@ -17,6 +17,7 @@ from jarvis.log import log
 from jarvis.log import setup as setup_log
 from jarvis.tools import ToolExecutor
 from jarvis.ui import MODES, UI
+from jarvis import updates
 from jarvis.verify import verify
 from jarvis.voice import strip_wake_word
 
@@ -112,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     voice = None
     voice_out = True  # passa a False se a resposta falada falhar
     awake_until = 0.0  # mãos-livres: até quando aceita frases sem "Jarvis"
+    update_notified = False
     if mode != "texto":
         try:
             voice = _load_voice(ui)
@@ -268,6 +270,9 @@ def main(argv: list[str] | None = None) -> int:
                     log.info("verificação: %s", check.ui_line())
                     spoken = f"{spoken} {check.spoken()}"
                 say(spoken, time.monotonic() - started)
+                if not update_notified and updates.newer_code_available():
+                    update_notified = True
+                    ui.info("🔄 Há uma versão nova do Jarvis: fecha e abre o Jarvis para a usar.")
                 awake_until = time.monotonic() + FOLLOW_UP_SECONDS
     except (KeyboardInterrupt, EOFError):
         ui.console.print()

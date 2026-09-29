@@ -127,6 +127,17 @@ def is_action_request(text: str) -> bool:
 MAX_STEPS = 6
 _CANCEL = re.compile(r"^\W*(?:cancela|cancelar|esquece|deixa|nada|não|nao|nope)\b", re.IGNORECASE)
 _PLATFORM_NAMES = {"discord": "Discord", "whatsapp": "WhatsApp", "telegram": "Telegram"}
+# "manda-me um print", "mostra-me a tela", "foto do que está no ecrã"
+_SCREENSHOT_REQUEST = re.compile(
+    r"\bprint\b|captura d[oe] ecr|screenshot|\bfoto\s+(?:d[oa]|n[oa]|\w+\s+)?\w*\s*(?:que\s+est[aá]\s+n[oa]\s+)?(?:ecr[aã]|tela)|"
+    r"mostra(?:[- ]me)?\s+(?:o\s+|a\s+)?(?:meu\s+|minha\s+)?(?:ecr[aã]|tela)|o que est[aá] n[oa] (?:meu |minha )?(?:ecr[aã]|tela)",
+    re.IGNORECASE,
+)
+_HELP_REQUEST = re.compile(
+    r"o que (?:[eé] que )?(?:sabes|consegues|podes) fazer|o que (?:[eé] que )?(?:ele|tu|o jarvis) (?:j[aá] )?(?:faz|fazes)|"
+    r"^\W*(?:ajuda|/ajuda|help|comandos)\W*$",
+    re.IGNORECASE,
+)
 ACTION_LOCK = threading.RLock()
 
 
@@ -169,6 +180,14 @@ class Brain:
                     request="",  # o texto é exatamente o que foi escrito
                 )
                 return result.content if not result.is_error else f"Não enviei: {result.content}"
+        # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
+        if _SCREENSHOT_REQUEST.search(text):
+            result = self._run_tool(ToolCall("screenshot", {}), request=text)
+            return result.content
+        if _HELP_REQUEST.search(text):
+            from jarvis.help import HELP_TEXT
+
+            return HELP_TEXT
         target = parse_send_target(text)
         if target and not extract_dictated_message(text):
             self.pending_send = target

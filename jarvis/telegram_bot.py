@@ -114,8 +114,16 @@ class TelegramBot:
             self.send(chat, f"Recebi \"{text[:60]}\" quando estava desligado, por isso não fiz nada. "
                             "Se ainda quiseres, manda outra vez.")
             return
-        if text in ("/start", "/help"):
-            self.send(chat, "Olá, sou o Jarvis. Diz-me o que queres que faça no PC.")
+        if text in ("/start", "/help", "/ajuda"):
+            from jarvis.help import HELP_TEXT
+
+            self.send(chat, HELP_TEXT)
+            return
+        if text in ("/reiniciar", "/restart"):
+            from jarvis import updates
+
+            self.send(chat, "🔄 A reiniciar o Jarvis com a versão mais recente… Dá-me uns segundos.")
+            updates.restart()
             return
         self.jobs.put((text, chat))
 
@@ -165,6 +173,10 @@ class TelegramBot:
             except Exception as exc:
                 log.exception("Telegram: erro a tratar %r", text)
                 reply = f"Erro: {exc}"
+            from jarvis import updates
+
+            if updates.newer_code_available():
+                reply += "\n\n" + updates.NOTICE
             self.send(chat, reply)
 
     def run(self):

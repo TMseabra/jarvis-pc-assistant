@@ -134,3 +134,15 @@ def test_game_without_roblox_in_request_opens_pc_game(monkeypatch):
     assert executor.run("play_roblox", {"game": "Palworld"}, "abre o jogo palworld") == "Abri Palworld."
     assert "Roblox" in executor.run("play_roblox", {"game": "Greenville"}, "abre o jogo greenville no roblox")
     assert opened == ["Palworld"]
+
+
+def test_find_play_button_on_real_riot_screenshot():
+    import numpy as np
+    PIL = __import__("pytest").importorskip("PIL.Image")
+    from pathlib import Path
+    from jarvis.actions.riot import find_play_button
+
+    rgb = np.array(PIL.open(Path(__file__).parent / "fixtures" / "riot_client.png").convert("RGB"))
+    x, y = find_play_button(rgb)
+    assert 250 < x < 420 and 1080 < y < 1160  # o botão vermelho "Play" em baixo à esquerda
+    assert find_play_button(np.zeros((800, 1200, 3), dtype=np.uint8)) is None

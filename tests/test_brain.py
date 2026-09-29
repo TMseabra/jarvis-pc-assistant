@@ -395,3 +395,11 @@ def test_two_step_send_new_command_cancels_pending(monkeypatch):
 def test_enviando_is_a_claim():
     brain, _ = make_brain([StepResult("Enviando mensagem para o Rafosto."), StepResult("Enviando…")])
     assert "Não enviei" in brain.handle("diz ao rafosto no discord que já vou")
+
+
+def test_screenshot_and_help_shortcuts_skip_the_model(monkeypatch):
+    monkeypatch.setattr("jarvis.actions.screen.screenshot", lambda monitor=0: "Tirei um print de todos os ecrãs.")
+    brain, llm = make_brain([])  # o modelo não é chamado
+    assert brain.handle("Podes me manda foto no que esta na tela") == "Tirei um print de todos os ecrãs."
+    assert brain.handle("Mostra me a tela") == "Tirei um print de todos os ecrãs."
+    assert "sei fazer" in brain.handle("podes me dizer o que ele ja faz?")
