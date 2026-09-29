@@ -235,3 +235,12 @@ def test_photos_and_links_are_saved_as_memes(monkeypatch, tmp_path):
     assert (tmp_path / "Macaco fixe.jpg").read_bytes() == b"JPEGDATA"
     assert "Guardei o meme \"Macaco fixe\"" in api.messages[-1]
     assert bot.jobs.empty()
+
+
+def test_live_screen_numbers_and_order():
+    from jarvis.telegram_bot import live_screen_number, screens
+
+    assert live_screen_number("/aovivo") == 0 and live_screen_number("/aovivo 2") == 2
+    assert live_screen_number("mostra o ecrã 3 ao vivo") == 3 and live_screen_number("ecrã ao vivo") == 0
+    mons = [{"left": -1920, "top": 0}, {"left": 1920, "top": 0}, {"left": -1920, "top": 0}, {"left": 0, "top": 0}]
+    assert [m["left"] for m in screens(mons)] == [-1920, 0, 1920]

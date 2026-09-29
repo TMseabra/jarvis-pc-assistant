@@ -99,6 +99,12 @@ class TelegramAPI:
 MEME_LINK = re.compile(r"https?://(?:www\.)?(?:tenor\.com|giphy\.com|media\d*\.giphy\.com|media\d*\.tenor\.com|"
                        r"i\.imgur\.com|imgur\.com)/\S+", re.IGNORECASE)
 LIVE_SECONDS = 60
+
+
+def live_screen_number(text: str) -> int:
+    """"/aovivo 2", "mostra o ecrã 3 ao vivo" -> 2 / 3; sem número -> 0 (todos os ecrãs)."""
+    m = re.search(r"(?:/(?:aovivo|ecra|ecrã)|ecr[aã]|tela|monitor)\s*(?:n\.?º?\s*)?(\d)", text, re.IGNORECASE)
+    return int(m.group(1)) if m else 0
 LIVE_REQUEST = re.compile(
     r"(?:ecr[aã]|tela|pc|computador).*(?:ao\s+vivo|em\s+direto|tempo\s+real|\blive\b)|"
     r"(?:ao\s+vivo|em\s+direto|tempo\s+real|\blive\b).*(?:ecr[aã]|tela|pc|computador)",
@@ -106,16 +112,24 @@ LIVE_REQUEST = re.compile(
 )
 
 
-def grab_screen_jpeg(width: int = 1280, quality: int = 60) -> bytes:
-    """Print do ecrã principal em JPEG pequeno (rápido de enviar)."""
+def screens(monitors: list[dict]) -> list[dict]:
+    """Ecrãs numerados da esquerda para a direita (o mss dá-os pela ordem do Windows)."""
+    return sorted(monitors[1:], key=lambda m: (m["left"], m["top"]))
+
+
+def grab_screen_jpeg(screen: int = 0, width: int | None = None, quality: int = 60) -> bytes:
+    """Print em JPEG pequeno (rápido de enviar): screen=0 são todos os ecrãs juntos, 1, 2, 3... um só."""
     import io
 
     import mss
     from PIL import Image
 
     with mss.mss() as sct:
-        shot = sct.grab(sct.monitors[1])
+        mons = screens(sct.monitors)
+        area = sct.monitors[0] if screen <= 0 or screen > len(mons) else mons[screen - 1]
+        shot = sct.grab(area)
     img = Image.frombytes("RGB", shot.size, shot.rgb)
+    width = width or (2400 if screen <= 0 else 1280)
     if img.width > width:
         img = img.resize((width, int(img.height * width / img.width)))
     buffer = io.BytesIO()
@@ -198,9 +212,12 @@ class TelegramBot:
             self.live_stop.set()
             if text.startswith("/"):
                 return
-        if text.lower() in ("/aovivo", "/ecra", "/ecrã") or LIVE_REQUEST.search(text):
+        if re.match(r"^/(?:aovivo|ecra|ecrã)\b", text.lower()) or LIVE_REQUEST.search(text):
             self.live_stop.clear()
-            threading.Thread(target=self.live_screen, args=(chat,), daemon=True, name="ecra-ao-vivo").start()
+            screen = live_screen_number(text)
+            grab = (lambda: grab_screen_jpeg(screen))
+            threading.Thread(target=self.live_screen, args=(chat,), kwargs={"grab": grab, "screen": screen},
+                             daemon=True, name="ecra-ao-vivo").start()
             return
         self.jobs.put((text, chat))
 
@@ -233,11 +250,13 @@ class TelegramBot:
 
     # --- ecrã ao vivo ----------------------------------------------------------
 
-    def live_screen(self, chat: int, seconds: float = LIVE_SECONDS, interval: float = 2.0, grab=None):
+    def live_screen(self, chat: int, seconds: float = LIVE_SECONDS, interval: float = 2.0, grab=None, screen: int = 0):
         """Manda uma foto do ecrã e vai-a atualizando (quase como um vídeo) durante `seconds`."""
         grab = grab or grab_screen_jpeg
         try:
-            first = self.api.send_photo_bytes(chat, grab(), f"🔴 Ecrã ao vivo ({int(seconds)} s). /parar para acabar.")
+            label = f"Ecrã {screen}" if screen else "Todos os ecrãs"
+            first = self.api.send_photo_bytes(chat, grab(), f"🔴 {label} ao vivo ({int(seconds)} s). "
+                                                            "/parar para acabar; /aovivo 2 mostra só o ecrã 2.")
         except Exception as exc:
             self.send(chat, f"Não consegui mostrar o ecrã: {exc}")
             return
@@ -246,7 +265,7 @@ class TelegramBot:
             try:
                 left = int(end - time.monotonic())
                 self.api.edit_photo_bytes(chat, first["message_id"], grab(),
-                                          f"🔴 Ecrã ao vivo ({left} s). /parar para acabar.")
+                                          f"🔴 {label} ao vivo ({left} s). /parar para acabar.")
             except Exception as exc:  # ex.: imagem igual à anterior ("message is not modified")
                 log.debug("ecrã ao vivo: %s", exc)
         try:

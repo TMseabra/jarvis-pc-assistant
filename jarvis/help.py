@@ -21,4 +21,4 @@ HELP_TEXT = """Olá, sou o Jarvis. Isto é o que sei fazer:
 📊 "faz um gráfico das minhas horas na Steam", "faz um gráfico com…"
 
 Fotos, prints e gráficos ficam em Ambiente de Trabalho\\Jarvis (apagados ao fim de 7 dias).
-No Telegram: /aovivo mostra o ecrã do PC quase em tempo real (1 minuto; /parar acaba), /ajuda mostra isto, /reiniciar carrega a versão mais recente do Jarvis."""
+No Telegram: /aovivo mostra os ecrãs do PC quase em tempo real (todos juntos; /aovivo 2 só o 2.º a contar da esquerda; 1 minuto; /parar acaba), /ajuda mostra isto, /reiniciar carrega a versão mais recente do Jarvis."""
