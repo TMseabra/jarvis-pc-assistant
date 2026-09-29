@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import ai_web, files, media, projects, roblox, steam, system
+from jarvis.actions import ai_web, files, media, projects, roblox, screen, steam, system
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -187,6 +187,18 @@ TOOL_SPECS = [
             "type": "object",
             "properties": {"game": {"type": "string", "description": "Nome do jogo do Roblox."}},
             "required": ["game"],
+        },
+    },
+    {
+        "name": "screenshot",
+        "description": (
+            "Tira um print do ecrã do PC. Se o pedido vier pelo Telegram, a imagem é enviada no chat. "
+            "Usa para 'manda-me um print', 'mostra-me o ecrã', 'o que está no meu ecrã?'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"monitor": {"type": "integer", "description": "0 = todos os ecrãs, 1, 2... = um ecrã."}},
+            "required": [],
         },
     },
     {
@@ -466,6 +478,12 @@ class ToolExecutor:
             if game.strip().lower() in ("roblox", "o roblox", "roblox player", "app do roblox"):
                 return system.open_app("Roblox")  # "abre o Roblox": só a app, sem entrar num jogo
             return roblox.play(game)
+        if name == "screenshot":
+            try:
+                monitor = int(args.get("monitor") or 0)
+            except (TypeError, ValueError):
+                monitor = 0
+            return screen.screenshot(monitor)
         if name == "steam_stats":
             return steam.steam_stats(str(args.get("scope") or "all"))
         if name == "list_ai_chats":

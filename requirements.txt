@@ -9,6 +9,7 @@ PyAudio>=0.2.14
 pywinauto>=0.6.9; sys_platform == "win32"
 faster-whisper>=1.1
 openwakeword>=0.6
+mss>=9.0
 edge-tts>=7.0
 pyttsx3>=2.90
 # Bibliotecas CUDA para o Whisper usar a GPU NVIDIA (sem elas, corre no CPU)

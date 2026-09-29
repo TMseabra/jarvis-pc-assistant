@@ -135,3 +135,19 @@ def test_old_messages_are_not_executed():
     bot.poll_once()
     assert list(bot.jobs.queue) == []
     assert "quando estava desligado" in api.sent[-1]["text"]
+
+
+def test_screenshot_is_sent_to_chat(tmp_path, monkeypatch):
+    from jarvis.actions import screen
+
+    shot = tmp_path / "print.png"
+    shot.write_bytes(b"png")
+    monkeypatch.setattr(screen, "screenshot", lambda monitor=0: f"Tirei um print.\n📎 {shot}")
+    api = FakeAPI()
+    sent_files = []
+    api.send_file = lambda chat, path, caption="": sent_files.append((chat, path))
+    controller = remote.TelegramController(api=api)
+    controller.brain.llm = FakeLLM([StepResult("", [ToolCall("screenshot", {})]), StepResult("Aqui está.")])
+    reply = controller.handle("manda-me um print", ME)
+    assert sent_files == [(ME, shot)]
+    assert "Tirei um print." in reply and "📎" not in reply.split("\n")[0]

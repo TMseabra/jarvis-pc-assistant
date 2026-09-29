@@ -5,6 +5,7 @@ import sys
 import threading
 
 from jarvis.actions.desktop_chat import ChatRouter
+from jarvis.actions.screen import attachments
 from jarvis.actions.messaging import Messenger
 from jarvis.brain import Brain
 from jarvis.commands import split_commands
@@ -87,6 +88,14 @@ class TelegramController:
                 break
         reply = format_reply(answers, self.results)
         log.info("telegram resposta: %r", reply)
+        # Ficheiros criados pelas ferramentas (prints do ecrã, ...) vão para o chat.
+        for result in self.results:
+            for path in attachments(result.content):
+                try:
+                    self.bot.api.send_file(chat, path, caption=path.name)
+                except Exception as exc:
+                    log.warning("Telegram: não enviei %s: %s", path, exc)
+                    reply += f"\n⚠️ Não consegui enviar {path.name}: {exc}"
         return reply
 
     def start_background(self) -> threading.Thread:

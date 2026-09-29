@@ -45,6 +45,26 @@ class TelegramAPI:
             raise RuntimeError(f"Telegram {method}: {data.get('description', response.status_code)}")
         return data["result"]
 
+    def send_file(self, chat: int, path, caption: str = ""):
+        """Imagens como foto (se o Telegram aceitar), o resto como ficheiro."""
+        from pathlib import Path
+
+        path = Path(path)
+        is_image = path.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
+        attempts = [("sendPhoto", "photo")] if is_image and path.stat().st_size < 10_000_000 else []
+        attempts.append(("sendDocument", "document"))
+        error = None
+        for method, field in attempts:
+            with path.open("rb") as f:
+                response = self.http.post(API.format(token=self.token, method=method),
+                                          data={"chat_id": chat, "caption": caption[:1000]},
+                                          files={field: (path.name, f)}, timeout=120)
+            data = response.json()
+            if data.get("ok"):
+                return data["result"]
+            error = data.get("description")  # ex.: foto grande demais -> tenta como ficheiro
+        raise RuntimeError(f"Telegram: não consegui enviar {path.name}: {error}")
+
 
 def parse_allowed_ids(raw: str) -> set[int]:
     return {int(x) for x in raw.replace(";", ",").split(",") if x.strip().lstrip("-").isdigit()}

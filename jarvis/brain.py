@@ -36,6 +36,7 @@ open_ai_chat para abrir uma ("abre a segunda", "a do TaskFlow"), continue_ai_cha
 - responder à última mensagem recebida / às conversas por ler (reply_last_message);
 - fechar uma aplicação (close_app);
 - entrar num jogo do Roblox pelo nome (play_roblox);
+- print do ecrã (screenshot; pelo Telegram a imagem é enviada no chat);
 - horas jogadas na Steam, jogo com mais horas, favoritos (steam_stats);
 - abrir a última conversa do Claude/ChatGPT e mandar continuar (continue_ai_chat).
 
