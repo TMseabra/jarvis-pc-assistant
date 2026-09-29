@@ -95,6 +95,18 @@ def main(argv: list[str] | None = None) -> int:
     log.info("=== Jarvis arrancou (%s)", _model_label())
     ui = UI()
     ui.banner([("🧠", _model_label())])
+    # Telegram logo ao arrancar (antes da escolha do modo), se estiver configurado e nenhum
+    # serviço em segundo plano o estiver a ler.
+    from jarvis.remote import TelegramController, claim_bot, telegram_configured
+
+    if telegram_configured():
+        if claim_bot():
+            TelegramController(ui=ui).start_background()
+            log.info("telegram: bot ligado nesta janela")
+            ui.info("📱 Telegram ligado: podes mandar pedidos pelo teu bot.")
+        else:
+            ui.info("📱 O serviço do Telegram já está a correr em segundo plano.")
+
     mode = "maos-livres" if args.voz else (args.modo or ui.choose_mode())
 
     voice = None
@@ -203,16 +215,6 @@ def main(argv: list[str] | None = None) -> int:
     except LLMError as exc:
         ui.error(str(exc))
         return 1
-
-    # Telegram: se estiver configurado e nenhum serviço em segundo plano o estiver a ler.
-    from jarvis.remote import TelegramController, claim_bot, telegram_configured
-
-    if telegram_configured():
-        if claim_bot():
-            TelegramController(ui=ui).start_background()
-            ui.info("📱 Telegram ligado: podes mandar pedidos pelo teu bot.")
-        else:
-            ui.info("📱 O serviço do Telegram já está a correr em segundo plano.")
 
     # Carrega o modelo e a lista de apps em segundo plano, para o 1.º pedido ser rápido.
     threading.Thread(target=lambda: (brain.llm.warmup(), list_start_apps()), daemon=True).start()

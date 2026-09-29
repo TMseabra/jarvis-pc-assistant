@@ -11,6 +11,7 @@ Segurança:
 import queue
 import secrets
 import threading
+import time
 from collections.abc import Callable
 
 import httpx
@@ -18,6 +19,9 @@ import httpx
 from jarvis.log import log
 
 API = "https://api.telegram.org/bot{token}/{method}"
+
+# Pedidos mais antigos do que isto (enviados com o Jarvis desligado) não são executados.
+STALE_SECONDS = 120
 
 # Ferramentas que precisam de confirmação quando o pedido vem pelo Telegram.
 SENSITIVE_TOOLS = {"continue_work", "open_project", "delete_file", "git_push", "run_command"}
@@ -83,6 +87,12 @@ class TelegramBot:
             return
         if not text:
             self.send(chat, "Por agora só percebo mensagens de texto.")
+            return
+        if time.time() - message.get("date", time.time()) > STALE_SECONDS:
+            # Chegou enquanto o Jarvis estava desligado: não executar pedidos antigos de repente.
+            log.info("Telegram: pedido antigo ignorado: %r", text)
+            self.send(chat, f"Recebi \"{text[:60]}\" quando estava desligado, por isso não fiz nada. "
+                            "Se ainda quiseres, manda outra vez.")
             return
         if text in ("/start", "/help"):
             self.send(chat, "Olá, sou o Jarvis. Diz-me o que queres que faça no PC.")

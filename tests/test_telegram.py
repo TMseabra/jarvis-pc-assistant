@@ -29,8 +29,9 @@ class FakeAPI:
         return {}
 
 
-def message(user, text):
-    return {"from": {"id": user}, "chat": {"id": user}, "text": text}
+def message(user, text, age=0):
+    import time
+    return {"from": {"id": user}, "chat": {"id": user}, "text": text, "date": int(time.time() - age)}
 
 
 def test_parse_allowed_ids():
@@ -125,3 +126,12 @@ def test_write_env_updates_and_appends(tmp_path):
     assert env.read_text(encoding="utf-8").splitlines() == [
         "JARVIS_BROWSER=opera", "JARVIS_TELEGRAM_TOKEN=123:abc", "JARVIS_TELEGRAM_ALLOWED_IDS=111",
     ]
+
+
+def test_old_messages_are_not_executed():
+    api = FakeAPI()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    api.push("message", message(ME, "abre a calculadora", age=600))  # enviada há 10 min
+    bot.poll_once()
+    assert list(bot.jobs.queue) == []
+    assert "quando estava desligado" in api.sent[-1]["text"]
