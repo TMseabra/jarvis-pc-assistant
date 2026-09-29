@@ -8,6 +8,8 @@ import os
 import re
 import sys
 import tempfile
+import threading
+import time
 import uuid
 import warnings
 from pathlib import Path
@@ -166,6 +168,7 @@ class Speaker:
             return
         from jarvis.ducking import ducked
 
+        STOP_SPEAKING.clear()
         with ducked():  # baixa a música e os jogos enquanto falo
             self._say(text)
 
@@ -251,10 +254,26 @@ def _write_wav(path: Path, audio, rate: int):
         w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
 
 
+# Carregar em "Parar" (ou /parar) corta a voz a meio.
+STOP_SPEAKING = threading.Event()
+
+
+def stop_speaking():
+    STOP_SPEAKING.set()
+
+
 def _play_wav(path: Path):
+    import wave
     import winsound
 
-    winsound.PlaySound(str(path), winsound.SND_FILENAME)  # espera que acabe; não usa COM
+    with wave.open(str(path)) as w:
+        duration = w.getnframes() / w.getframerate()
+    winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC)  # não usa COM
+    end = time.monotonic() + duration + 0.2
+    while time.monotonic() < end:
+        if STOP_SPEAKING.wait(0.05):
+            winsound.PlaySound(None, 0)  # para o som a meio
+            return
 
 
 def _play_mp3_windows(path: Path):
@@ -281,7 +300,13 @@ def _play_mp3_windows(path: Path):
                 error.append(f"MCI {code}")
                 return
             try:
-                mci(f"play {alias} wait", None, 0, None)
+                mci(f"play {alias}", None, 0, None)
+                status = ctypes.create_unicode_buffer(32)
+                while not STOP_SPEAKING.wait(0.05):
+                    mci(f"status {alias} mode", status, 32, None)
+                    if status.value != "playing":
+                        break
+                mci(f"stop {alias}", None, 0, None)
             finally:
                 mci(f"close {alias}", None, 0, None)
         finally:

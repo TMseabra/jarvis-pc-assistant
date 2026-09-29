@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<title>J.A.R.V.I.S.</title>
+<style>
+  :root {
+    --bg: #02070d;
+    --panel: rgba(8, 24, 38, 0.72);
+    --line: rgba(64, 190, 255, 0.22);
+    --cyan: #3fd0ff;
+    --cyan-soft: #7fe3ff;
+    --blue: #1b7fd6;
+    --amber: #ffc53d;
+    --red: #ff4d5e;
+    --green: #4dffb0;
+    --text: #d6f3ff;
+    --muted: #6d93a8;
+    --state: var(--cyan);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse at 30% 40%, rgba(27, 127, 214, 0.18), transparent 60%),
+      linear-gradient(rgba(63, 208, 255, 0.045) 1px, transparent 1px) 0 0 / 32px 32px,
+      linear-gradient(90deg, rgba(63, 208, 255, 0.045) 1px, transparent 1px) 0 0 / 32px 32px,
+      var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Bahnschrift", system-ui, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  body.thinking { --state: var(--amber); }
+  body.recording { --state: #6ff0ff; }
+  body.error { --state: var(--red); }
+
+  .app { display: grid; grid-template-columns: minmax(380px, 46%) 1fr; height: 100%; }
+
+  /* --- HUD --------------------------------------------------------------- */
+  .hud-side { position: relative; display: flex; flex-direction: column; align-items: center;
+              justify-content: center; padding: 24px; border-right: 1px solid var(--line); }
+  .corner { position: absolute; width: 22px; height: 22px; border: 2px solid var(--cyan); opacity: .55; }
+  .corner.tl { top: 14px; left: 14px; border-right: 0; border-bottom: 0; }
+  .corner.tr { top: 14px; right: 14px; border-left: 0; border-bottom: 0; }
+  .corner.bl { bottom: 14px; left: 14px; border-right: 0; border-top: 0; }
+  .corner.br { bottom: 14px; right: 14px; border-left: 0; border-top: 0; }
+  .sys { position: absolute; top: 18px; left: 46px; font: 11px/1.5 Consolas, monospace; color: var(--muted);
+         letter-spacing: .12em; text-transform: uppercase; }
+  .sys b { color: var(--cyan); font-weight: normal; }
+  .clock { position: absolute; top: 18px; right: 46px; font: 12px Consolas, monospace; color: var(--cyan-soft);
+           letter-spacing: .1em; }
+
+  .hud { width: min(100%, 440px); aspect-ratio: 1; filter: drop-shadow(0 0 14px rgba(63, 208, 255, .35)); }
+  .hud svg { width: 100%; height: 100%; overflow: visible; }
+  .spin { transform-origin: 250px 250px; animation: spin var(--speed, 40s) linear infinite; }
+  .spin.rev { animation-direction: reverse; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  body.thinking .spin { --speed: 6s; }
+  body.listening .spin, body.recording .spin { --speed: 18s; }
+  .ring { fill: none; stroke: var(--state); transition: stroke .4s; }
+  .tick { stroke: var(--state); transition: stroke .4s; }
+  .band { fill: none; stroke: #4fb6ee; stroke-opacity: .55; }
+  .amber { fill: none; stroke: var(--amber); }
+  .core { fill: url(#coreGlow); transition: opacity .4s; }
+  .pulse { transform-origin: 250px 250px; animation: pulse 2.4s ease-in-out infinite; }
+  body.listening .pulse, body.recording .pulse { animation-duration: 1.1s; }
+  @keyframes pulse { 50% { transform: scale(1.045); opacity: .65; } }
+  .title { font: 600 34px "Bahnschrift", "Segoe UI", sans-serif; letter-spacing: .16em; fill: #e8fbff; }
+  .eq line { stroke: var(--state); stroke-width: 3; stroke-linecap: round; opacity: .9; }
+
+  .state { margin-top: 10px; font: 600 13px Consolas, monospace; letter-spacing: .32em; color: var(--state);
+           text-transform: uppercase; min-height: 18px; text-shadow: 0 0 10px var(--state); }
+  .detail { margin-top: 4px; font: 12px Consolas, monospace; color: var(--muted); min-height: 16px;
+            max-width: 90%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 18px; }
+  .chip { font: 11px Consolas, monospace; color: var(--cyan-soft); border: 1px solid var(--line);
+          background: rgba(10, 40, 60, .5); padding: 4px 10px; border-radius: 3px; letter-spacing: .05em; }
+  .controls { display: flex; gap: 12px; margin-top: 18px; }
+  .btn { font: 600 12px "Segoe UI", sans-serif; letter-spacing: .12em; text-transform: uppercase; cursor: pointer;
+         color: var(--cyan); background: rgba(8, 30, 46, .8); border: 1px solid var(--cyan); padding: 9px 16px;
+         border-radius: 3px; transition: background .2s, box-shadow .2s; }
+  .btn:hover { background: rgba(63, 208, 255, .15); box-shadow: 0 0 14px rgba(63, 208, 255, .35); }
+  .btn.stop { color: var(--red); border-color: var(--red); }
+  .btn.stop:hover { background: rgba(255, 77, 94, .15); box-shadow: 0 0 14px rgba(255, 77, 94, .35); }
+  .btn.off { color: var(--muted); border-color: var(--muted); }
+
+  /* --- conversa ------------------------------------------------------------- */
+  .chat-side { display: flex; flex-direction: column; min-width: 0; }
+  .chat-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 22px;
+               border-bottom: 1px solid var(--line); font: 12px Consolas, monospace; letter-spacing: .2em;
+               color: var(--muted); text-transform: uppercase; }
+  .chat-head span b { color: var(--cyan); font-weight: normal; }
+  .log { flex: 1; overflow-y: auto; padding: 18px 22px; display: flex; flex-direction: column; gap: 10px;
+         user-select: text; scroll-behavior: smooth; }
+  .log::-webkit-scrollbar { width: 6px; }
+  .log::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 4px; line-height: 1.45; font-size: 14.5px;
+         white-space: pre-wrap; word-wrap: break-word; animation: appear .25s ease-out; position: relative; }
+  @keyframes appear { from { opacity: 0; transform: translateY(6px); } }
+  .msg.jarvis { align-self: flex-start; background: var(--panel); border: 1px solid rgba(63, 208, 255, .45);
+                box-shadow: inset 0 0 18px rgba(63, 208, 255, .08); }
+  .msg.jarvis::before { content: "J.A.R.V.I.S."; display: block; font: 10px Consolas, monospace;
+                        letter-spacing: .25em; color: var(--cyan); margin-bottom: 4px; }
+  .msg.user { align-self: flex-end; background: rgba(255, 197, 61, .07); border: 1px solid rgba(255, 197, 61, .45); }
+  .msg.user::before { content: attr(data-who); display: block; font: 10px Consolas, monospace; letter-spacing: .25em;
+                      color: var(--amber); margin-bottom: 4px; text-align: right; }
+  .msg .time { display: block; margin-top: 4px; font: 10px Consolas, monospace; color: var(--muted); text-align: right; }
+  .msg img { display: block; max-width: 100%; max-height: 240px; margin-top: 8px; border: 1px solid var(--line); }
+  .msg a { color: var(--cyan-soft); }
+  .action { align-self: flex-start; font: 12.5px Consolas, monospace; color: #9fc4d8; padding-left: 4px; }
+  .action .res { display: block; padding-left: 22px; color: var(--muted); }
+  .action .res.ok::before { content: "✔ "; color: var(--green); }
+  .action .res.bad { color: var(--red); }
+  .action .res.bad::before { content: "✖ "; }
+  .check { align-self: flex-start; font: 12px Consolas, monospace; padding-left: 4px; }
+  .check.ok { color: var(--green); } .check.warn { color: var(--amber); }
+  .note { align-self: center; font: 12px Consolas, monospace; color: var(--amber); opacity: .9; text-align: center; }
+  .note.err { color: var(--red); }
+
+  .confirm { align-self: stretch; border: 1px solid var(--amber); background: rgba(255, 197, 61, .08);
+             padding: 12px 14px; border-radius: 4px; }
+  .confirm .q { color: var(--amber); font-weight: 600; margin-bottom: 6px; }
+  .confirm textarea { width: 100%; background: rgba(0, 0, 0, .35); color: var(--text); border: 1px solid var(--line);
+                      font: 14px "Segoe UI", sans-serif; padding: 8px; resize: vertical; min-height: 54px; }
+  .confirm .row { display: flex; gap: 10px; margin-top: 8px; }
+
+  .input { display: flex; gap: 10px; padding: 14px 22px 18px; border-top: 1px solid var(--line); }
+  .input input { flex: 1; background: rgba(4, 18, 30, .85); color: var(--text); border: 1px solid var(--line);
+                 border-radius: 3px; padding: 12px 14px; font: 14.5px "Segoe UI", sans-serif; outline: none;
+                 transition: border-color .2s, box-shadow .2s; }
+  .input input:focus { border-color: var(--cyan); box-shadow: 0 0 12px rgba(63, 208, 255, .25); }
+  .input input::placeholder { color: var(--muted); }
+</style>
+</head>
+<body class="idle">
+<div class="app">
+  <section class="hud-side">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <div class="sys">Just A Rather Very Intelligent System<br><b id="sysline">sistemas a iniciar…</b></div>
+    <div class="clock" id="clock"></div>
+
+    <div class="hud">
+      <svg viewBox="0 0 500 500" aria-hidden="true">
+        <defs>
+          <radialGradient id="coreGlow">
+            <stop offset="0" stop-color="#3fd0ff" stop-opacity=".30"/>
+            <stop offset=".55" stop-color="#1b7fd6" stop-opacity=".10"/>
+            <stop offset="1" stop-color="#02070d" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle class="core" cx="250" cy="250" r="160"/>
+        <!-- anel exterior com marcas -->
+        <g class="spin" style="--speed:60s">
+          <circle class="ring" cx="250" cy="250" r="236" stroke-width="1.2" stroke-opacity=".5"/>
+          <g id="ticks"></g>
+        </g>
+        <!-- banda segmentada azul -->
+        <g class="spin rev" style="--speed:34s">
+          <circle class="band" cx="250" cy="250" r="198" stroke-width="30" stroke-dasharray="26 5"
+                  stroke-dashoffset="0" pathLength="1000" transform="rotate(-100 250 250)"
+                  style="stroke-dasharray: 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 18 4 400"/>
+        </g>
+        <!-- arco âmbar com pontos -->
+        <g class="spin" style="--speed:22s">
+          <path class="amber" d="M 88 250 A 162 162 0 0 1 150 122" stroke-width="3"/>
+          <circle cx="210" cy="92" r="4" fill="#ffc53d"/><circle cx="250" cy="88" r="4" fill="#ffc53d"/>
+          <circle cx="290" cy="92" r="4" fill="#ffc53d"/>
+        </g>
+        <!-- anel interior tracejado -->
+        <g class="spin rev" style="--speed:16s">
+          <circle class="ring" cx="250" cy="250" r="150" stroke-width="2" stroke-dasharray="4 8" stroke-opacity=".8"/>
+        </g>
+        <g class="pulse">
+          <circle class="ring" cx="250" cy="250" r="128" stroke-width="3" stroke-opacity=".9"/>
+          <circle class="ring" cx="250" cy="250" r="118" stroke-width="1" stroke-opacity=".5"/>
+        </g>
+        <!-- equalizador (quando fala / ouve) -->
+        <g class="eq" id="eq"></g>
+        <text class="title" x="250" y="262" text-anchor="middle">J.A.R.V.I.S.</text>
+      </svg>
+    </div>
+
+    <div class="state" id="state">em espera</div>
+    <div class="detail" id="detail"></div>
+    <div class="chips" id="chips"></div>
+    <div class="controls">
+      <button class="btn" id="mic" title="Ligar/desligar o microfone">🎙 Microfone</button>
+      <button class="btn stop" id="stop" title="Parar de falar e cancelar o pedido (Esc)">■ Parar</button>
+    </div>
+  </section>
+
+  <section class="chat-side">
+    <div class="chat-head"><span>Registo <b>// conversa</b></span><span id="count">0 pedidos</span></div>
+    <div class="log" id="log"></div>
+    <form class="input" id="form">
+      <input id="text" autocomplete="off" placeholder="Escreve um pedido… (ou diz “Ei Jarvis, …”)" autofocus>
+      <button class="btn" type="submit">Enviar</button>
+    </form>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = () => (window.pywebview && window.pywebview.api) || null;
+let requests = 0, micOn = true, speaking = false, listening = false;
+
+// --- desenho do HUD --------------------------------------------------------
+(function drawTicks() {
+  const g = $("ticks"), eq = $("eq"), ns = "http://www.w3.org/2000/svg";
+  for (let i = 0; i < 120; i++) {
+    const a = (i / 120) * Math.PI * 2, long = i % 10 === 0, r1 = 236, r2 = long ? 218 : 226;
+    const l = document.createElementNS(ns, "line");
+    l.setAttribute("x1", 250 + r1 * Math.cos(a)); l.setAttribute("y1", 250 + r1 * Math.sin(a));
+    l.setAttribute("x2", 250 + r2 * Math.cos(a)); l.setAttribute("y2", 250 + r2 * Math.sin(a));
+    l.setAttribute("class", "tick"); l.setAttribute("stroke-width", long ? 2 : 1);
+    l.setAttribute("stroke-opacity", long ? .9 : .45);
+    g.appendChild(l);
+  }
+  for (let i = 0; i < 64; i++) {
+    const l = document.createElementNS(ns, "line");
+    l.dataset.a = (i / 64) * Math.PI * 2;
+    eq.appendChild(l);
+  }
+})();
+
+function animateEq() {
+  const lines = $("eq").children, t = performance.now() / 1000;
+  for (let i = 0; i < lines.length; i++) {
+    const a = +lines[i].dataset.a;
+    let h = 0;
+    if (speaking) h = 6 + Math.abs(Math.sin(t * 9 + i * 0.7) * Math.cos(t * 3.1 + i * 0.23)) * 26 + Math.random() * 6;
+    else if (listening) h = 3 + Math.abs(Math.sin(t * 2.2 + i * 0.35)) * 6;
+    const r1 = 134, r2 = r1 + h;
+    lines[i].setAttribute("x1", 250 + r1 * Math.cos(a)); lines[i].setAttribute("y1", 250 + r1 * Math.sin(a));
+    lines[i].setAttribute("x2", 250 + r2 * Math.cos(a)); lines[i].setAttribute("y2", 250 + r2 * Math.sin(a));
+    lines[i].style.opacity = h ? .85 : 0;
+  }
+  requestAnimationFrame(animateEq);
+}
+requestAnimationFrame(animateEq);
+
+setInterval(() => {
+  const d = new Date();
+  $("clock").textContent = d.toLocaleDateString("pt-PT") + "  " + d.toLocaleTimeString("pt-PT");
+}, 1000);
+
+// --- estado ---------------------------------------------------------------
+const LABELS = { idle: "em espera", listening: "a ouvir", recording: "a gravar", thinking: "a processar",
+                 speaking: "a falar", error: "erro" };
+function setState(state, detail) {
+  document.body.className = state;
+  speaking = state === "speaking";
+  listening = state === "listening" || state === "recording";
+  $("state").textContent = LABELS[state] || state;
+  $("detail").textContent = detail || "";
+}
+
+// --- conversa -------------------------------------------------------------
+function now() { return new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }); }
+function scroll() { const l = $("log"); l.scrollTop = l.scrollHeight; }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+
+function linkify(node) {
+  // Links clicáveis e imagens (linhas "📎 caminho") dentro de uma mensagem.
+  const lines = node.textContent.split("\n"), keep = [], images = [];
+  for (const line of lines) {
+    const m = line.match(/^📎\s+(.+\.(png|jpe?g|gif|webp))\s*$/i);
+    if (m) images.push(m[1]); else keep.push(line);
+  }
+  node.textContent = "";
+  keep.join("\n").split(/(https?:\/\/\S+)/g).forEach((part) => {
+    if (/^https?:\/\//.test(part)) {
+      const a = el("a", "", part); a.href = "#";
+      a.onclick = (ev) => { ev.preventDefault(); api() && api().open_link(part); };
+      node.appendChild(a);
+    } else node.appendChild(document.createTextNode(part));
+  });
+  images.forEach((p) => { const img = el("img"); img.src = "file:///" + p.replace(/\\/g, "/"); node.appendChild(img); });
+}
+
+function addUser(text, voice) {
+  const m = el("div", "msg user", text); m.dataset.who = voice ? "TU  🎙" : "TU";
+  $("log").appendChild(m); requests++; $("count").textContent = requests + (requests === 1 ? " pedido" : " pedidos"); scroll();
+}
+function addJarvis(text, seconds) {
+  const m = el("div", "msg jarvis", text); linkify(m);
+  const t = el("span", "time", now() + (seconds != null ? "  ·  " + seconds.toFixed(1) + " s" : "")); m.appendChild(t);
+  $("log").appendChild(m); scroll();
+}
+let lastAction = null;
+function addAction(icon, label) {
+  lastAction = el("div", "action", icon + "  " + label + "…"); $("log").appendChild(lastAction); scroll();
+}
+function addResult(ok, text) {
+  const r = el("span", "res " + (ok ? "ok" : "bad"), text);
+  (lastAction || $("log")).appendChild(r); scroll();
+}
+function addCheck(ok, text, failures) {
+  const c = el("div", "check " + (ok ? "ok" : "warn"), (ok ? "✔ " : "⚠ ") + text + (failures.length ? "\n" + failures.map(f => "   ✖ " + f).join("\n") : ""));
+  c.style.whiteSpace = "pre-wrap"; $("log").appendChild(c); scroll();
+}
+function addNote(text, error) { $("log").appendChild(el("div", "note" + (error ? " err" : ""), text)); scroll(); }
+
+function askConfirm(id, question, message) {
+  const box = el("div", "confirm"), ta = el("textarea"); ta.value = message;
+  box.appendChild(el("div", "q", question)); box.appendChild(ta);
+  const row = el("div", "row"), yes = el("button", "btn", "Enviar"), no = el("button", "btn stop", "Cancelar");
+  const done = (value) => { box.remove(); api() && api().answer(id, value); };
+  yes.onclick = () => done(ta.value.trim()); no.onclick = () => done("");
+  row.append(yes, no); box.appendChild(row); $("log").appendChild(box); scroll(); ta.focus();
+}
+
+// Eventos vindos do Python.
+window.J = {
+  event(e) {
+    switch (e.type) {
+      case "state": setState(e.state, e.detail); break;
+      case "user": addUser(e.text, e.voice); break;
+      case "reply": addJarvis(e.text, e.seconds); break;
+      case "action": addAction(e.icon, e.label); break;
+      case "result": addResult(e.ok, e.text); break;
+      case "check": addCheck(e.ok, e.text, e.failures || []); break;
+      case "note": addNote(e.text, e.error); break;
+      case "chips": $("chips").replaceChildren(...e.items.map(([k, v]) => el("span", "chip", k + "  " + v))); break;
+      case "sys": $("sysline").textContent = e.text; break;
+      case "confirm": askConfirm(e.id, e.question, e.message); break;
+      case "mic": micOn = e.on; $("mic").classList.toggle("off", !micOn);
+                  $("mic").textContent = micOn ? "🎙 Microfone" : "🔇 Microfone"; break;
+    }
+  },
+};
+
+$("form").onsubmit = (ev) => {
+  ev.preventDefault();
+  const text = $("text").value.trim();
+  if (text && api()) { api().send(text); $("text").value = ""; }
+};
+$("stop").onclick = () => api() && api().stop();
+$("mic").onclick = () => api() && api().toggle_mic();
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") api() && api().stop(); });
+window.addEventListener("pywebviewready", () => api().ready());
+</script>
+</body>
+</html>

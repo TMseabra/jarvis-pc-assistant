@@ -72,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--telegram", action="store_true", help="liga o Jarvis ao teu bot do Telegram")
     parser.add_argument("--classroom", action="store_true", help="liga o Jarvis ao teu Google Classroom")
     parser.add_argument("--servico", action="store_true", help="só o Telegram, em segundo plano")
+    parser.add_argument("--terminal", action="store_true", help="usar o terminal em vez da janela com o HUD")
     args = parser.parse_args(argv)
 
     if args.telegram:
@@ -93,14 +94,26 @@ def main(argv: list[str] | None = None) -> int:
 
         return test_wake()
 
+    setup_log()
+    if not (args.modo or args.voz or args.terminal):
+        # Por omissão: a janela com o HUD (mãos-livres + escrever, com botão Parar).
+        try:
+            from jarvis.gui.app import run_gui
+
+            return run_gui(lambda gui: session(gui, "janela"))
+        except ImportError as exc:  # sem pywebview: fica o terminal
+            log.warning("janela indisponível (%s): a usar o terminal", exc)
+
     # A consola do Windows nem sempre usa UTF-8 (acentos saem como "�").
     for stream in (sys.stdin, sys.stdout):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+    return session(UI(), "maos-livres" if args.voz else args.modo)
 
-    setup_log()
+
+def session(ui, mode: str | None) -> int:
+    """O ciclo do Jarvis: ouvir/ler pedidos, executá-los e responder (terminal ou janela)."""
     log.info("=== Jarvis arrancou (%s)", _model_label())
-    ui = UI()
     ui.banner([("🧠", _model_label())])
     # Telegram logo ao arrancar (antes da escolha do modo), se estiver configurado e nenhum
     # serviço em segundo plano o estiver a ler.
@@ -114,7 +127,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             ui.info("📱 O serviço do Telegram já está a correr em segundo plano.")
 
-    mode = "maos-livres" if args.voz else (args.modo or ui.choose_mode())
+    mode = mode or ui.choose_mode()
+    window = mode == "janela"
+    busy = threading.Event()  # janela: a tratar de um pedido ou a falar (o microfone espera)
+    last_spoke_end = 0.0
 
     voice = None
     voice_out = True  # passa a False se a resposta falada falhar
@@ -134,8 +150,10 @@ def main(argv: list[str] | None = None) -> int:
             mode = "texto"
 
     def say(text: str, seconds: float | None = None):
-        nonlocal voice_out
+        nonlocal voice_out, last_spoke_end
         ui.reply(text, seconds)
+        if window and ui.cancel.is_set():
+            return  # carregaste em Parar: não fala
         if voice and voice_out:
             try:
                 with ui.status("A falar…", spinner="point"):
@@ -143,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:
                 voice_out = False
                 ui.error(f"A resposta falada falhou ({exc}). Continuo só com texto.")
+            last_spoke_end = time.monotonic()
 
     def confirm(platform: str, contact: str, message: str) -> str | None:
         if mode != "maos-livres":
@@ -186,12 +205,12 @@ def main(argv: list[str] | None = None) -> int:
             ui.heard(text)
         return text
 
-    def next_hands_free_command() -> str | None:
+    def next_hands_free_command(show: bool = True) -> str | None:
         """No mãos-livres só reage a frases começadas por "Jarvis", exceto logo a seguir a responder."""
         nonlocal awake_until
         awake = time.monotonic() < awake_until
         text = listen("À escuta… começa por “Ei Jarvis, …”" if not awake else "À escuta… podes continuar",
-                      hands_free=True)
+                      hands_free=True, show=show)
         if not text:
             return None
         command = strip_wake_word(text)
@@ -230,25 +249,58 @@ def main(argv: list[str] | None = None) -> int:
     threading.Thread(target=lambda: (brain.llm.warmup(), list_start_apps()), daemon=True).start()
 
     ui.help(mode)
+    if window:
+        ui.voice_enabled = voice is not None
+        if voice is not None:
+            def voice_loop():
+                """Janela: ouve sempre (quando o Jarvis está livre) e põe os pedidos na fila."""
+                while not ui.closed.is_set():
+                    if not ui.mic_on or busy.is_set():
+                        time.sleep(0.2)
+                        continue
+                    started = time.monotonic()
+                    heard = next_hands_free_command(show=False)
+                    # Se entretanto o Jarvis falou, a gravação pode ter apanhado a voz dele.
+                    if heard and not busy.is_set() and started >= last_spoke_end:
+                        ui.heard(heard)
+                        ui.submit(heard, voice=True)
+
+            threading.Thread(target=voice_loop, daemon=True, name="microfone").start()
+        else:
+            ui.info("Sem microfone: escreve os pedidos em baixo.")
     say("Olá, sou o Jarvis. Em que posso ajudar?")
     try:
         while True:
-            if mode == "maos-livres":
+            if window:
+                item = ui.next_command()
+                if item is None:
+                    if ui.closed.is_set():
+                        break
+                    continue
+                command, via_voice = item
+                if not via_voice and command != "sair":
+                    ui.typed(command)
+                busy.set()
+                ui.cancel.clear()
+            elif mode == "maos-livres":
                 command = next_hands_free_command()
             else:
                 command = ui.ask()
                 if not command and mode == "falar":
                     command = listen("Fala quando quiseres… (Enter para terminar)", manual=True, wait=15)
             if not command:
+                busy.clear()
                 continue
 
             lowered = command.lower().strip(" .!?")
             if lowered in EXIT_WORDS:
-                say("Até já.")
+                if not (window and ui.closed.is_set()):
+                    say("Até já.")
                 break
             if lowered in RESET_WORDS:
                 brain.reset()
                 say("Pronto, começámos uma conversa nova.")
+                busy.clear()
                 continue
 
             # "abre o Spotify e a Steam e manda..." -> um pedido de cada vez.
@@ -258,6 +310,8 @@ def main(argv: list[str] | None = None) -> int:
             turn_results.clear()
             started = time.monotonic()
             for i, part in enumerate(parts, 1):
+                if window and ui.cancel.is_set():
+                    break  # Parar: não faz o resto
                 label = f"A pensar… ({i}/{len(parts)}: {part})" if len(parts) > 1 else "A pensar…"
                 try:
                     with ui.status(label):
@@ -280,10 +334,13 @@ def main(argv: list[str] | None = None) -> int:
                     update_notified = True
                     ui.info("🔄 Há uma versão nova do Jarvis: fecha e abre o Jarvis para a usar.")
                 awake_until = time.monotonic() + FOLLOW_UP_SECONDS
+            busy.clear()
     except (KeyboardInterrupt, EOFError):
         ui.console.print()
     finally:
         executor.close()
+        if window and not ui.closed.is_set():
+            ui.window.destroy()
     return 0
 
 
