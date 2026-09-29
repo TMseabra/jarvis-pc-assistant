@@ -9,7 +9,7 @@ from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
 from jarvis import followups, memes, music_intents, overlay
-from jarvis.actions import diagnostics
+from jarvis.actions import diagnostics, vscode
 from jarvis.power_intents import parse_power
 from jarvis.actions.find import parse_image_request, parse_links_request
 from jarvis.actions.site_search import parse_refine, parse_site_search
@@ -245,6 +245,9 @@ class Brain:
             return "\n".join(r.content for r in results)
         self.followups = []  # a oferta anterior já não se aplica
         # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
+        vs_reply = self._vscode(text)
+        if vs_reply:
+            return vs_reply
         if diagnostics.REQUEST.search(text):
             return self._run_tool(ToolCall("pc_status", {}), request=text).content
         power = parse_power(text)
@@ -300,6 +303,36 @@ class Brain:
             self.pending_send = target
             platform, contact = target
             return f"Que mensagem queres enviar ao {contact} no {_PLATFORM_NAMES.get(platform, platform)}?"
+        return None
+
+    def _vscode(self, text: str) -> str | None:
+        """VS Code: escolher o repositório, escrever no Claude, instalar extensões."""
+        if vscode.OPEN_REQUEST.match(text):
+            repos = vscode.recent_repos()
+            if not repos:
+                return self._run_tool(ToolCall("open_project", {"name": "vscode"}), request=text).content
+            self.followups = [(r.name, ToolCall("open_project", {"name": r.name})) for r in repos]
+            self.followups.append(("só o VS Code", ToolCall("open_project", {"name": "vscode"})))
+            lines = ["Que repositório abro no VS Code? (os mais recentes primeiro)"]
+            lines += [f"{i}. {r.name}" for i, r in enumerate(repos, 1)]
+            return "\n".join(lines + ["Diz o número ou o nome (ou \"só o VS Code\")."])
+        prompt = vscode.parse_claude_request(text)
+        if prompt:
+            return self._run_tool(ToolCall("vscode_claude", {"prompt": prompt}), request=text).content
+        name = vscode.parse_extension_request(text)
+        if name:
+            try:
+                found = vscode.search_extensions(name)
+            except Exception as exc:
+                return f"Não consegui procurar a extensão \"{name}\" ({type(exc).__name__})."
+            if not found:
+                return f"Não encontrei nenhuma extensão \"{name}\" no Marketplace do VS Code."
+            self.followups = [(e["name"], ToolCall("vscode_install", {"id": e["id"]})) for e in found]
+            if len(found) == 1:
+                return f"Instalo {vscode.describe(found[0])}? (sim/não)"
+            lines = [f"Encontrei estas extensões para \"{name}\":"]
+            lines += [f"{i}. {vscode.describe(e)}" for i, e in enumerate(found, 1)]
+            return "\n".join(lines + ["Qual instalo? Diz o número (ou \"não\")."])
         return None
 
     def _music(self, text: str, kind: str, arg: str) -> str:

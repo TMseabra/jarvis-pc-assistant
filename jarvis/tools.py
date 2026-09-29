@@ -202,6 +202,19 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "vscode_claude",
+        "description": "Escreve um pedido no Claude (Claude Code) DENTRO do VS Code. Usa para 'escreve no Claude "
+                       "do VS Code que…', 'pede ao Claude no VS Code para…'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "O pedido, tal como o utilizador disse."},
+                "project": {"type": "string", "description": "Repositório a abrir antes (opcional)."},
+            },
+            "required": ["prompt"],
+        },
+    },
+    {
         "name": "pc_status",
         "description": "Diagnóstico do PC (como o Gestor de Tarefas): CPU, RAM, disco, temperatura e uso da "
                        "placa gráfica, o que gasta mais e as apps abertas. Usa para 'como está o PC?', "
@@ -711,6 +724,14 @@ class ToolExecutor:
             return system.lock_pc()
         if name == "power":  # só pelo Brain, depois de o utilizador dizer "sim"
             return system.power(*_require(args, "action"))
+        if name == "vscode_claude":
+            from jarvis.actions import vscode
+
+            return vscode.ask_claude(*_require(args, "prompt"), project=str(args.get("project") or ""))
+        if name == "vscode_install":  # só pelo Brain, depois de o utilizador escolher
+            from jarvis.actions import vscode
+
+            return vscode.install_extension(*_require(args, "id"))
         if name == "pc_status":
             from jarvis.actions import diagnostics
 

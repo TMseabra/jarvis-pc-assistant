@@ -60,6 +60,9 @@
 - Se estiveres a jogar, o Jarvis confirma que o texto ficou mesmo na caixa antes de enviar, e no fim devolve-te o jogo e o rato onde estavam.
 
 ### 💻 Código, IA e escola
+- **"abre o VS Code"**: pergunta qual dos teus repositórios abrir (os mais recentes primeiro); respondes com o número ou o nome.
+- **"escreve no Claude do VS Code que faça os testes"**: abre o Claude Code dentro do VS Code com o pedido já escrito.
+- **"instala a extensão Prettier"** / "adiciona o plugin do Python": procura no Marketplace, mostra as mais instaladas e instala a que escolheres.
 - "abre o TaskFlow no VS Code", "continua o trabalho no meu GitHub", "diz ao Claudinho para continuar".
 - "abre o Claude" (pergunta se é no browser ou na app), "que conversas tenho no Claude?", "abre a segunda".
 - "faz-me uma imagem de…" (ChatGPT), "faz-me um script que…" (Claude).
@@ -165,7 +168,7 @@ jarvis/
   telegram_bot.py remote.py  # controlo pelo Telegram (+ /aovivo)
   llm/               # Ollama e Gemini com a mesma interface
   actions/           # apps, jogos, Spotify, YouTube, WhatsApp/Discord, sites, Classroom, diagnóstico…
-tests/               # pytest (364 testes)
+tests/               # pytest (384 testes)
 ```
 
 ## Testes

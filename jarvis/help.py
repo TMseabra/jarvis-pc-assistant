@@ -7,7 +7,7 @@ HELP_TEXT = """Olá, sou o Jarvis. Isto é o que sei fazer:
 🎵 Spotify: "põe uma música dos meus favoritos", "põe a playlist chill", "toca Noble", "salta", "pausa"
 ▶️ Vídeos: "põe um vídeo sobre gatos", "abre o meu último vídeo do YouTube", "procura no TikTok…"
 💬 Mensagens: "manda msg ao Rafosto no Discord" (pergunto o texto e envio), "diz à Ana no WhatsApp que já vou", "responde à última mensagem que recebi no WhatsApp", "lê as mensagens do Rafosto no Discord"
-💻 Código: "abre o TaskFlow no VS Code", "continua o trabalho no meu GitHub", "diz ao Claudinho para continuar no TaskFlow"
+💻 Código: "abre o VS Code" (pergunto qual repositório), "escreve no Claude do VS Code que…", "instala a extensão Prettier", "abre o TaskFlow no VS Code", "continua o trabalho no meu GitHub", "diz ao Claudinho para continuar no TaskFlow"
 🎨 IA: "faz-me uma imagem de…" (ChatGPT), "faz-me um script que…" (Claude), "que conversas tenho no Claude?", "abre o Claude na minha última conversa"
 🎮 Steam: "qual é o jogo com mais horas nos meus favoritos?"
 🔗 "mostra-me carros da Alpina à venda" (dou-te os links)  ·  🖼 "mostra-me uma foto de um Audi"
