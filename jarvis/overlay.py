@@ -107,7 +107,7 @@ def _launch(*args: str):
     subprocess.Popen([exe, "-m", "jarvis.overlay", *args], creationflags=flags, cwd=str(PROJECT_ROOT))
 
 
-def show_image(path, seconds: float = 8.0):
+def show_image(path, seconds: float = 10.0):
     _launch("--image", str(path), "--seconds", str(seconds))
 
 
@@ -117,7 +117,7 @@ def jumpscare():
 
 # --- imagem (memes) ----------------------------------------------------------
 
-def run_image(path: str, seconds: float = 8.0):
+def run_image(path: str, seconds: float = 10.0):
     """Mostra uma imagem (ou GIF animado) no meio do ecrã, a entrar com um "pop"."""
     import tkinter as tk
 
@@ -138,7 +138,7 @@ def run_image(path: str, seconds: float = 8.0):
     source = Image.open(path)
     frames = [f.convert("RGBA") for f in ImageSequence.Iterator(source)][:120]
     durations = [max(source.info.get("duration", 80), 30) for _ in frames]
-    scale = min(width * 0.8 / frames[0].width, height * 0.8 / frames[0].height)
+    scale = min(width * 0.96 / frames[0].width, height * 0.94 / frames[0].height)
     size = (max(1, int(frames[0].width * scale)), max(1, int(frames[0].height * scale)))
     frames = [f.resize(size) for f in frames]
     item = canvas.create_image(width / 2, height / 2)
@@ -269,7 +269,7 @@ if __name__ == "__main__":
     if args[:1] == ["--jumpscare"]:
         run_jumpscare()
     elif args[:1] == ["--image"]:
-        seconds = float(args[3]) if len(args) > 3 and args[2] == "--seconds" else 8.0
+        seconds = float(args[3]) if len(args) > 3 and args[2] == "--seconds" else 10.0
         run_image(args[1], seconds)
     else:
         run(" ".join(args) or "Olá")

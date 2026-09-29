@@ -9,6 +9,7 @@ from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
 from jarvis import followups, memes, music_intents, overlay
+from jarvis.actions import diagnostics
 from jarvis.power_intents import parse_power
 from jarvis.actions.find import parse_image_request, parse_links_request
 from jarvis.actions.site_search import parse_refine, parse_site_search
@@ -244,6 +245,8 @@ class Brain:
             return "\n".join(r.content for r in results)
         self.followups = []  # a oferta anterior já não se aplica
         # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
+        if diagnostics.REQUEST.search(text):
+            return self._run_tool(ToolCall("pc_status", {}), request=text).content
         power = parse_power(text)
         if power:
             action, question = power

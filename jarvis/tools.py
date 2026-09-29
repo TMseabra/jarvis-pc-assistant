@@ -202,6 +202,13 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "pc_status",
+        "description": "Diagnóstico do PC (como o Gestor de Tarefas): CPU, RAM, disco, temperatura e uso da "
+                       "placa gráfica, o que gasta mais e as apps abertas. Usa para 'como está o PC?', "
+                       "'faz um diagnóstico', 'temperatura do PC'.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    {
         "name": "meme_start",
         "description": "Mostra 5 memes para o utilizador escolher um e pô-lo em grande no ecrã do PC. "
                        "Usa para 'mete um meme na tela do PC'.",
@@ -704,6 +711,10 @@ class ToolExecutor:
             return system.lock_pc()
         if name == "power":  # só pelo Brain, depois de o utilizador dizer "sim"
             return system.power(*_require(args, "action"))
+        if name == "pc_status":
+            from jarvis.actions import diagnostics
+
+            return diagnostics.pc_status()
         if name == "meme_start":
             return self.memes.start()
         if name == "meme_choose":  # só chamado pelo Brain, com a resposta à lista
