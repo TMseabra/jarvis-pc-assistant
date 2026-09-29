@@ -154,9 +154,10 @@ class Transcriber:
 class Speaker:
     """Voz neural (edge-tts, precisa de internet) com recurso ao pyttsx3 se falhar."""
 
-    def __init__(self, voice: str = "pt-PT-DuarteNeural", engine: str = "edge"):
+    def __init__(self, voice: str = "pt-PT-DuarteNeural", engine: str = "edge", style: str = "normal"):
         self.voice = voice
         self.engine = engine
+        self.style = style  # "normal" ou "jarvis"
         self._fallback = None
 
     def say(self, text: str):
@@ -176,11 +177,19 @@ class Speaker:
         import edge_tts
 
         path = Path(tempfile.gettempdir()) / f"jarvis_{uuid.uuid4().hex}.mp3"
+        wav = path.with_suffix(".wav")
         try:
-            asyncio.run(edge_tts.Communicate(text, self.voice).save(str(path)))
-            _play_mp3_windows(path)
+            if self.style == "jarvis":
+                # Mais grave, um pouco mais rápida e com um efeito digital subtil.
+                asyncio.run(edge_tts.Communicate(text, self.voice, rate="+6%", pitch="-7Hz").save(str(path)))
+                _write_wav(wav, jarvis_effect(_decode(path)), JARVIS_RATE)
+                _play_wav(wav)
+            else:
+                asyncio.run(edge_tts.Communicate(text, self.voice).save(str(path)))
+                _play_mp3_windows(path)
         finally:
             path.unlink(missing_ok=True)
+            wav.unlink(missing_ok=True)
 
     def _say_pyttsx3(self, text: str):
         if self._fallback is None:
@@ -196,6 +205,50 @@ class Speaker:
                     break
         self._fallback.say(text)
         self._fallback.runAndWait()
+
+
+JARVIS_RATE = 24000
+
+
+def _decode(path: Path):
+    from faster_whisper import decode_audio
+
+    return decode_audio(str(path), sampling_rate=JARVIS_RATE)
+
+
+def jarvis_effect(audio, rate: int = JARVIS_RATE):
+    """Efeito "assistente de IA": tira os graves de fundo, junta um eco metálico muito curto
+    (dá o timbre digital) e um pouco de sala, e normaliza. Subtil: a voz continua clara."""
+    import numpy as np
+
+    audio = np.asarray(audio, dtype=np.float32)
+    # Passa-altos (~150 Hz): tira a média móvel, o que deixa a voz mais "limpa", como num altifalante.
+    width = max(1, rate // 150)
+    filtered = audio - np.convolve(audio, np.ones(width, dtype=np.float32) / width, mode="same")
+    out = filtered.copy()
+    for delay_ms, gain in ((9, 0.28), (17, 0.14), (48, 0.10), (95, 0.06)):
+        d = int(rate * delay_ms / 1000)
+        out[d:] += gain * filtered[:-d]
+    peak = float(np.max(np.abs(out))) or 1.0
+    return (out / peak * 0.9).astype(np.float32)
+
+
+def _write_wav(path: Path, audio, rate: int):
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
+
+
+def _play_wav(path: Path):
+    import winsound
+
+    winsound.PlaySound(str(path), winsound.SND_FILENAME)  # espera que acabe; não usa COM
 
 
 def _play_mp3_windows(path: Path):
@@ -338,13 +391,14 @@ class Voice:
         whisper_device: str = "auto",
         tts_voice: str = "pt-PT-DuarteNeural",
         tts_engine: str = "edge",
+        voice_style: str = "normal",
         end_silence: float = 3.0,
         manual_silence: float = 15.0,
     ):
         self.mic_index, self.mic_name = self._find_microphone(mic)
         self.recorder = Recorder(self.mic_index)
         self.transcriber = Transcriber(whisper_model, whisper_device, language.split("-")[0])
-        self.speaker = Speaker(tts_voice, tts_engine)
+        self.speaker = Speaker(tts_voice, tts_engine, voice_style)
         self.end_silence = end_silence
         self.manual_silence = manual_silence
 

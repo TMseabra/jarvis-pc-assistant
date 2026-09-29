@@ -92,6 +92,6 @@ def test_open_app_uses_apps_folder(monkeypatch):
 
 def test_open_website_uses_browser(monkeypatch):
     opened = []
-    monkeypatch.setattr(system.webbrowser, "open", opened.append)
+    monkeypatch.setattr(system, "open_url", opened.append)
     system.open_website("youtube.com")
     assert opened == ["https://youtube.com"]

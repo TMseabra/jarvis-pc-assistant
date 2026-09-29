@@ -54,6 +54,8 @@ class Config:
     # "edge" = voz neural portuguesa (online); "sapi" = vozes do Windows (offline).
     tts_engine: str = field(default_factory=lambda: _env("JARVIS_TTS", "edge"))
     tts_voice: str = field(default_factory=lambda: _env("JARVIS_TTS_VOICE", "pt-PT-DuarteNeural"))
+    # "jarvis" = voz mais grave e com efeito digital subtil; "normal" = voz neural sem efeitos.
+    voice_style: str = field(default_factory=lambda: _env("JARVIS_VOICE_STYLE", "normal").lower())
     # Browser para sites e pesquisas: "opera", "chrome", "firefox", "brave", "edge", um caminho
     # para o .exe, ou "default" (o browser predefinido do Windows).
     browser: str = field(default_factory=lambda: _env("JARVIS_BROWSER", "default"))

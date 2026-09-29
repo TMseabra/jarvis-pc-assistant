@@ -27,9 +27,13 @@ def _parse_python_call(text: str, tools: dict[str, list[str]]) -> list[ToolCall]
     params = tools[node.func.id]
     if len(node.args) > len(params):
         return []
+    def value(n):
+        # `music(play)`: uma palavra solta é texto (nunca é avaliada como código).
+        return n.id if isinstance(n, ast.Name) else ast.literal_eval(n)
+
     try:
-        args = {params[i]: ast.literal_eval(a) for i, a in enumerate(node.args)}
-        args.update({k.arg: ast.literal_eval(k.value) for k in node.keywords if k.arg})
+        args = {params[i]: value(a) for i, a in enumerate(node.args)}
+        args.update({k.arg: value(k.value) for k in node.keywords if k.arg})
     except (ValueError, SyntaxError):
         return []
     return [ToolCall(name=node.func.id, args=args)]

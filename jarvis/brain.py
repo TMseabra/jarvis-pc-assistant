@@ -22,8 +22,21 @@ Claude na web); "diz ao Claudinho para..." num projeto é o claude_prompt do ope
 - vídeos: play_video (entra no YouTube, ou no TikTok se ele disser TikTok, e pesquisa lá o vídeo) \
 — nunca web_search para vídeos;
 - música no Spotify: music (play/pause/next/previous);
+- criar imagens, código ou textos com uma IA na web: ask_ai (imagens -> ChatGPT, código -> Claude);
+- abrir pastas, ficheiros e Definições do Windows (open_path);
 - pesquisar no Google (web_search);
 - ler mensagens (read_messages) e responder a alguém (send_message) no WhatsApp, Telegram ou Discord.
+
+Pedidos vagos: escolhe a interpretação mais provável e chama logo a ferramenta, sem perguntar. \
+Só perguntas se não houver nenhuma interpretação razoável. Por exemplo:
+- Se ele disser "põe música" ou "quero ouvir qualquer coisa", chamas a ferramenta music com action play.
+- Se disser "quero rir" ou "mostra-me algo engraçado", chamas play_video com query vídeos engraçados.
+- Se pedir um logo, desenho, foto ou imagem, chamas ask_ai com kind image.
+- Se pedir um script, programa ou código, chamas ask_ai com kind code.
+- Se pedir para escrever um email, texto, resumo ou ideias, chamas ask_ai com kind text e o pedido todo.
+- Se disser "abre as minhas fotos" chamas open_path com imagens; "o som está estranho" ou "o \
+bluetooth não funciona" chamas open_path com som ou bluetooth.
+- Se disser só "vamos jogar", sem dizer o jogo, perguntas qual (não há interpretação segura).
 
 Regras:
 - Cada pedido novo de abrir, pesquisar, ler ou enviar exige uma chamada nova à ferramenta, \
@@ -60,7 +73,16 @@ _ACTION_REQUEST = re.compile(
     r"^\W*(?:(?:jarvis|por\s+favor|podes|consegues|queria\s+que|quero\s+que)\W+)*"
     r"(?:abr[ea]|abrir|pesquis[ae]|pesquisar|procur[ae]|procurar|l[êe]|ler|leia|"
     r"envi[ae]|enviar|mand[ae]|mandar|respond[ae]|responder|escrev[ae]|escrever|"
-    r"p[õo]e|p[ôo]r|mete|meter|toca|tocar|pausa|reproduz)\b",
+    r"p[õo]e|p[ôo]r|mete|meter|toca|tocar|pausa|reproduz|faz|faze|fazer|cria|criar|gera|gerar|desenha|desenhar)\b",
+    re.IGNORECASE,
+)
+
+
+# Respostas que dizem que algo foi (ou vai ser) feito no PC.
+# Só afirmações na 1.ª pessoa: "o museu está aberto" é uma resposta normal, não uma ação.
+_CLAIMS_ACTION = re.compile(
+    r"\b(?:abri|abro|vou abrir|pus|ponho|vou pôr|enviei|envio|vou enviar|pesquisei|pesquiso|"
+    r"vou pesquisar|toquei|mandei|liguei)\b",
     re.IGNORECASE,
 )
 
@@ -78,10 +100,12 @@ class Brain:
         llm: ChatProvider | None = None,
         executor: ToolExecutor | None = None,
         on_tool: Callable[[ToolCall], None] | None = None,
+        on_tool_result: Callable[[ToolResult], None] | None = None,
     ):
         self.llm = llm or create_provider(config, SYSTEM_PROMPT, TOOL_SPECS)
         self.executor = executor or ToolExecutor()
         self.on_tool = on_tool  # avisado antes de cada ferramenta (para a interface)
+        self.on_tool_result = on_tool_result  # e depois, com o resultado
 
     def reset(self):
         self.llm.reset()
@@ -98,6 +122,8 @@ class Brain:
             log.exception("erro inesperado em %s", call.name)
             result = ToolResult(call, f"Erro inesperado: {type(exc).__name__}: {exc}", is_error=True)
         log.info("  -> %s%s", "ERRO " if result.is_error else "", result.content[:300])
+        if self.on_tool_result:
+            self.on_tool_result(result)
         return result
 
     def handle(self, text: str) -> str:
@@ -118,8 +144,16 @@ class Brain:
                 if not step.tool_calls:
                     # Modelos pequenos às vezes respondem "abri"/"enviei" sem chamar a ferramenta,
                     # sobretudo quando o mesmo pedido já está no histórico.
-                    missing = (wants_send and not tried_send) or (wants_action and not used_tool)
-                    if missing and not step.text.rstrip().endswith("?"):
+                    # ...ou a resposta afirma uma ação ("Abro as definições", "Pus a música") sem
+                    # nenhuma ferramenta ter corrido.
+                    claims = not used_tool and bool(_CLAIMS_ACTION.search(step.text))
+                    missing = (wants_send and not tried_send) or ((wants_action or claims) and not used_tool)
+                    if missing:
+                        # Uma pergunta pode ser legítima ("qual jogo?"), mas às vezes esconde uma
+                        # ação inventada ("Abri o CV. Quem é o teu chefe?"): tentamos sempre uma vez;
+                        # se voltar a perguntar, aí passa.
+                        if retried and step.text.rstrip().endswith("?"):
+                            return step.text
                         if not retried:
                             retried = True
                             if wants_send:

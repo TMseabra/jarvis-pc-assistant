@@ -1,6 +1,7 @@
 """Ponto de entrada: `python -m jarvis.main [--modo texto|falar|maos-livres]`."""
 
 import argparse
+import re
 import sys
 import threading
 import time
@@ -16,6 +17,7 @@ from jarvis.log import log
 from jarvis.log import setup as setup_log
 from jarvis.tools import ToolExecutor
 from jarvis.ui import MODES, UI
+from jarvis.verify import verify
 from jarvis.voice import strip_wake_word
 
 EXIT_WORDS = {"sair", "adeus", "exit", "quit", "tchau"}
@@ -32,8 +34,14 @@ def is_yes(answer: str | None) -> bool:
 
 def _model_label() -> str:
     if config.provider == "gemini":
-        return f"Gemini · {config.gemini_model}"
+        return f"{config.gemini_model}"
     return f"Ollama · {config.ollama_model} (local)"
+
+
+def _short_mic_name(name: str) -> str:
+    """'Microfone (HyperX Quadcast)' -> 'HyperX Quadcast'."""
+    m = re.match(r"^(?:Microfone|Microphone)\s*\((.*)\)$", name)
+    return m.group(1) if m else name
 
 
 def _load_voice(ui: UI):
@@ -47,6 +55,7 @@ def _load_voice(ui: UI):
             whisper_device=config.whisper_device,
             tts_voice=config.tts_voice,
             tts_engine=config.tts_engine,
+            voice_style=config.voice_style,
             end_silence=config.end_silence,
             manual_silence=config.manual_silence,
         )
@@ -66,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     setup_log()
     log.info("=== Jarvis arrancou (%s)", _model_label())
     ui = UI()
-    ui.banner([("Modelo", _model_label())])
+    ui.banner([("🧠", _model_label())])
     mode = "maos-livres" if args.voz else (args.modo or ui.choose_mode())
 
     voice = None
@@ -77,17 +86,17 @@ def main(argv: list[str] | None = None) -> int:
             voice = _load_voice(ui)
             device = "GPU" if voice.transcriber.device == "cuda" else "CPU"
             ui.banner([
-                ("Modelo", _model_label()),
-                ("Microfone", voice.mic_name),
-                ("Voz", f"Whisper {voice.transcriber.model_name} ({device}) · {config.tts_voice}"),
+                ("🧠", _model_label()),
+                ("🎤", _short_mic_name(voice.mic_name)),
+                ("🗣", f"{config.tts_voice.split('-')[-1].replace('Neural', '')} · Whisper {device}"),
             ])
         except Exception as exc:
             ui.error(f"Não consegui ativar a voz: {exc}\nVou continuar em modo texto.")
             mode = "texto"
 
-    def say(text: str):
+    def say(text: str, seconds: float | None = None):
         nonlocal voice_out
-        ui.reply(text)
+        ui.reply(text, seconds)
         if voice and voice_out:
             try:
                 with ui.status("A falar…", spinner="point"):
@@ -158,7 +167,13 @@ def main(argv: list[str] | None = None) -> int:
         confirm=confirm if config.confirm_send else None,
     )
     try:
-        brain = Brain(executor=executor, on_tool=ui.tool)
+        turn_results: list = []  # resultados das ações do pedido atual, para a verificação final
+
+        def on_result(result):
+            ui.tool_result(result)
+            turn_results.append(result)
+
+        brain = Brain(executor=executor, on_tool=ui.tool, on_tool_result=on_result)
     except LLMError as exc:
         ui.error(str(exc))
         return 1
@@ -192,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
             parts = split_commands(command)
             log.info("pedido: %r -> %s", command, parts)
             answers = []
+            turn_results.clear()
+            started = time.monotonic()
             for i, part in enumerate(parts, 1):
                 label = f"A pensar… ({i}/{len(parts)}: {part})" if len(parts) > 1 else "A pensar…"
                 try:
@@ -203,7 +220,14 @@ def main(argv: list[str] | None = None) -> int:
                     ui.error(str(exc))
                     break
             if answers:
-                say(" ".join(answers))
+                # Verificação final: diz o que ficou feito e o que falhou, e que terminou.
+                check = verify(turn_results)
+                spoken = " ".join(answers)
+                if check:
+                    ui.verification(check)
+                    log.info("verificação: %s", check.ui_line())
+                    spoken = f"{spoken} {check.spoken()}"
+                say(spoken, time.monotonic() - started)
                 awake_until = time.monotonic() + FOLLOW_UP_SECONDS
     except (KeyboardInterrupt, EOFError):
         ui.console.print()

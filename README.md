@@ -72,6 +72,11 @@ Pela linha de comandos: `.venv\Scripts\python -m jarvis.main --modo texto|falar|
 - **Spotify pelo nome** ("toca Bohemian Rhapsody", "põe a playlist de treino"): precisa da API do Spotify (Premium). Uma vez: em https://developer.spotify.com/dashboard cria uma app com o Redirect URI `http://127.0.0.1:8888/callback` (Web API), copia o **Client ID** para o `.env` como `JARVIS_SPOTIFY_CLIENT_ID=...` e, no primeiro pedido, autoriza no browser. Sem isto, o Jarvis abre a pesquisa no Spotify e diz que não conseguiu pôr a tocar.
 - **Contactos:** em `contactos.txt` (criado automaticamente, fora do git) escreve uma pessoa por linha, `Nome como aparece = formas como o dizes` (ex.: `Rafosto = rafa, rafael`). O Whisper passa a reconhecer esses nomes e o Jarvis traduz o que disseste para o nome certo. Nomes parecidos ("Rafosta") também são encontrados, e a confirmação mostra sempre o nome real antes de enviar.
 - **Claudinho:** "abre o Claudinho" abre o Claude na web; "diz ao Claudinho para continuar no TaskFlow" abre o projeto e passa o pedido ao Claude Code.
+- **Imagens, código e textos com IA:** "faz-me uma imagem de…" abre o ChatGPT com o pedido (e envia-o); "faz-me um script que…" abre o Claude com o pedido e carrega em Enter quando a janela estiver à frente; "escreve-me um email…" vai ao ChatGPT. Usa a tua sessão no browser escolhido.
+- **Abrir qualquer coisa:** pastas ("abre as transferências", "as minhas fotos"), ficheiros pelo nome ("abre o meu CV") e Definições do Windows ("o bluetooth não funciona", "abre o som").
+- **Pedidos vagos:** o Jarvis escolhe a interpretação mais provável e faz logo ("põe música", "quero rir um bocado"); só pergunta quando não há nenhuma interpretação segura.
+- **Verificação final:** no fim de cada pedido o Jarvis confere o resultado de todas as ações e diz "Terminei, correu tudo bem" ou o que falhou.
+- **Voz estilo JARVIS:** `JARVIS_VOICE_STYLE=jarvis` deixa a voz mais grave, um pouco mais rápida e com um efeito digital subtil.
 - **Registo:** `.jarvis/jarvis.log` guarda o que foi ouvido, as ações e os erros (só no teu PC), para perceber o que falhou.
 
 ### Voz

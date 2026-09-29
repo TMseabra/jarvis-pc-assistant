@@ -13,7 +13,7 @@ import re
 _VERBS = (
     r"abr[ea]|abrir|pesquis[ae]|pesquisar|procur[ae]|procurar|l[êe]|ler|leia|"
     r"envi[ae]|enviar|mand[ae]|mandar|diz|diga|respond[ae]|responder|escrev[ae]|escrever|"
-    r"p[õo]e|p[ôo]r|mete|meter|toca|tocar|pausa|reproduz"
+    r"p[õo]e|p[ôo]r|mete|meter|toca|tocar|pausa|reproduz|faz|faze|fazer|cria|criar|gera|gerar|desenha|desenhar"
 )
 # Separadores seguidos de um verbo de ação: ", abre", " e manda", " e depois pesquisa"...
 _SPLIT = re.compile(
@@ -26,6 +26,7 @@ _PLATFORM = re.compile(r"\b(whatsapp|telegram|discord)\b", re.IGNORECASE)
 # "abre no VS Code o projeto X", "abre o site..." : não dividir a lista de objetos.
 _NO_LIST_SPLIT = re.compile(r"vs ?code|projeto|reposit[óo]rio|https?://|\.com\b|\.pt\b", re.IGNORECASE)
 _QUOTED = re.compile(r"[\"“«].*?[\"”»]")
+_NOT_BEFORE_ACTION = {"a", "de", "do", "da", "que", "para", "sem", "por", "o", "um", "uma", "se", "e"}
 _TO_CLAUDE = re.compile(
     r"(?:diz|diga|mand[ae]|escrev[ae]|pede)\s+(?:ao|a|para\s+o)\s+claud(?:e|inho)\b", re.IGNORECASE
 )
@@ -42,6 +43,12 @@ def _split_actions(text: str) -> list[str]:
         if dictation and m.start() > dictation.start() and _SEND.match(text[start:]):
             continue
         if _TO_CLAUDE.match(text[m.end():]):  # "...TaskFlow e diz ao Claude para continuar"
+            continue
+        # "um robô a tocar guitarra", "vídeo de pesquisar...": o verbo faz parte da mesma frase.
+        separator = text[m.start():m.end()]
+        before = text[:m.start()].split()
+        if "," not in separator and not re.search(r"\be\b", separator, re.I) \
+                and before and before[-1].lower() in _NOT_BEFORE_ACTION:
             continue
         parts.append(text[start:m.start()])
         start = m.end()

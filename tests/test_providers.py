@@ -77,6 +77,8 @@ def test_parse_text_tool_calls_ignores_non_calls(text):
 @pytest.mark.parametrize("text, expected", [
     ('web_search("capital de França")', ("web_search", {"query": "capital de França"})),
     ("open_app(name='Spotify')", ("open_app", {"name": "Spotify"})),
+    ("music(play)", ("music", {"action": "play"})),
+    ("music(action=pause)", ("music", {"action": "pause"})),
     (
         '```\nread_messages("whatsapp", "Ana", count=5)\n```',
         ("read_messages", {"platform": "whatsapp", "contact": "Ana", "count": 5}),

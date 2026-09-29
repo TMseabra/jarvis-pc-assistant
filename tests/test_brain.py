@@ -82,7 +82,7 @@ def test_plain_answer_without_tools():
 
 def test_tool_loop_runs_tool_and_returns_final_text(monkeypatch):
     opened = []
-    monkeypatch.setattr("jarvis.actions.system.webbrowser.open", opened.append)
+    monkeypatch.setattr("jarvis.actions.system.open_url", opened.append)
     brain, llm = make_brain([call("open_website", url="https://www.youtube.com"), StepResult("Abri o YouTube.")])
 
     assert brain.handle("abre o youtube") == "Abri o YouTube."
@@ -91,7 +91,7 @@ def test_tool_loop_runs_tool_and_returns_final_text(monkeypatch):
 
 
 def test_empty_final_text_falls_back_to_tool_result(monkeypatch):
-    monkeypatch.setattr("jarvis.actions.system.webbrowser.open", lambda url: None)
+    monkeypatch.setattr("jarvis.actions.system.open_url", lambda url: None)
     brain, _ = make_brain([call("web_search", query="gatos"), StepResult("")])
     assert brain.handle("pesquisa gatos") == "Pesquisei por 'gatos'."
 
@@ -188,9 +188,9 @@ def test_claimed_action_twice_is_reported_honestly():
 
 
 def test_clarifying_question_is_not_nudged():
-    brain, llm = make_brain([StepResult("Que aplicação queres abrir?")])
-    assert brain.handle("abre aquela app") == "Que aplicação queres abrir?"
-    assert len(llm.turns[-1]) == 2
+    # Tenta uma vez (sem histórico); se voltar a perguntar, a pergunta passa.
+    brain, llm = make_brain([StepResult("Que aplicação queres abrir?"), StepResult("Qual aplicação?")])
+    assert brain.handle("abre aquela app") == "Qual aplicação?"
 
 
 @pytest.mark.parametrize("text, expected", [
@@ -329,3 +329,18 @@ def test_pick_result_prefers_exact_match():
 def test_parse_whatsapp_meta():
     assert parse_whatsapp_meta("[12:34, 01/01/2026] Ana Silva: ") == ("Ana Silva", "12:34")
     assert parse_whatsapp_meta("sem formato") == ("", "")
+
+
+def test_claimed_action_in_reply_is_retried_even_without_action_verb(monkeypatch):
+    monkeypatch.setattr("jarvis.actions.files.open_path", lambda name: "Abri as Definições: Bluetooth.")
+    brain, llm = make_brain([
+        StepResult("Abro as definições do Bluetooth para ti."),  # afirma, mas não chamou nada
+        StepResult("", [ToolCall("open_path", {"name": "bluetooth"})]),
+        StepResult("Abri as definições do Bluetooth."),
+    ])
+    assert brain.handle("o bluetooth não está a funcionar") == "Abri as definições do Bluetooth."
+
+
+def test_normal_answer_with_passive_words_is_not_a_claim():
+    brain, _ = make_brain([StepResult("O museu está aberto até às 18h.")])
+    assert brain.handle("a que horas fecha o museu?") == "O museu está aberto até às 18h."

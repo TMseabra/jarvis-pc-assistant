@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import media, projects, system
+from jarvis.actions import ai_web, files, media, projects, system
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -63,6 +63,38 @@ TOOL_SPECS = [
                 "query": {"type": "string", "description": "Música, artista ou playlist (opcional)."},
             },
             "required": ["action"],
+        },
+    },
+    {
+        "name": "ask_ai",
+        "description": (
+            "Pede a uma IA na web (com a sessão do utilizador no browser) para criar algo: kind='image' "
+            "para imagens/desenhos/fotos (vai ao ChatGPT), kind='code' para código/programas/scripts (vai ao "
+            "Claude), kind='text' para textos, resumos, ideias. Não uses para código num projeto do PC "
+            "(isso é open_project com claude_prompt)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "O pedido completo, em português, com os detalhes dados."},
+                "kind": {"type": "string", "enum": ["image", "code", "text"]},
+                "site": {"type": "string", "enum": ["chatgpt", "claude"],
+                         "description": "Só se o utilizador disser onde (ChatGPT ou Claude/Claudinho)."},
+            },
+            "required": ["task", "kind"],
+        },
+    },
+    {
+        "name": "open_path",
+        "description": (
+            "Abre uma pasta, um ficheiro ou uma página das Definições do Windows pelo nome: 'transferências', "
+            "'documentos', 'ambiente de trabalho', 'imagens', 'reciclagem', 'bluetooth', 'wi-fi', 'som', "
+            "'ecrã', 'windows update', ou o nome de um ficheiro/pasta (ex.: 'CV', 'fotos da praia')."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "Nome da pasta, ficheiro ou definição."}},
+            "required": ["name"],
         },
     },
     {
@@ -236,6 +268,11 @@ class ToolExecutor:
             return system.open_website(*_require(args, "url"))
         if name == "web_search":
             return system.web_search(*_require(args, "query"))
+        if name == "ask_ai":
+            task, kind = _require(args, "task", "kind")
+            return ai_web.ask_ai(task, kind, str(args.get("site") or ""))
+        if name == "open_path":
+            return files.open_path(*_require(args, "name"))
         if name == "play_video":
             (query,) = _require(args, "query")
             if str(args.get("site") or "").lower() == "tiktok":

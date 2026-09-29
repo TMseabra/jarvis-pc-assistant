@@ -77,3 +77,81 @@ def test_app_aliases_and_claudinho(monkeypatch):
 ])
 def test_split_music_and_claudinho(text, expected):
     assert split_commands(text) == expected
+
+
+# --- ficheiros, definições, IA na web ------------------------------------------
+
+from jarvis.actions import ai_web, files  # noqa: E402
+
+
+def test_find_path(tmp_path):
+    (tmp_path / "Trabalhos" / "Escola").mkdir(parents=True)
+    (tmp_path / "Trabalhos" / "Escola" / "CV.pdf").touch()
+    (tmp_path / "Trabalhos" / "cv antigo.docx").touch()
+    (tmp_path / "Fotos da Praia 2025").mkdir()
+    assert files.find_path("cv", [tmp_path]).name == "CV.pdf"          # 2 letras: só exato
+    assert files.find_path("fotos da praia", [tmp_path]).name == "Fotos da Praia 2025"
+    assert files.find_path("escola", [tmp_path]).name == "Escola"
+    assert files.find_path("xyz", [tmp_path]) is None
+
+
+def test_open_path_known_folders_and_settings(monkeypatch):
+    opened = []
+    monkeypatch.setattr(files.os, "startfile", opened.append, raising=False)
+    assert files.open_path("transferências") == "Abri a pasta Transferências."
+    assert files.open_path("Bluetooth") == "Abri as Definições: Bluetooth."
+    assert opened == ["shell:Downloads", "ms-settings:bluetooth"]
+
+
+def test_ask_ai_sites(monkeypatch):
+    opened = []
+    monkeypatch.setattr(ai_web, "open_url", opened.append)
+    monkeypatch.setattr(ai_web, "_submit_when_focused", lambda title: True)
+    assert "ChatGPT" in ai_web.ask_ai("um gato astronauta", "image")
+    assert opened[-1].startswith("https://chatgpt.com/?q=Gera%20uma%20imagem%3A%20um%20gato")
+    ai_web.ask_ai("script que renomeia fotos", "code")
+    assert opened[-1].startswith("https://claude.ai/new?q=script")
+    ai_web.ask_ai("um poema", "text", site="Claudinho")
+    assert opened[-1].startswith("https://claude.ai/new?q=")
+
+
+def test_ask_ai_claude_without_focus_says_so(monkeypatch):
+    monkeypatch.setattr(ai_web, "open_url", lambda url: None)
+    monkeypatch.setattr(ai_web, "_submit_when_focused", lambda title: False)
+    assert "carrega em Enter" in ai_web.ask_ai("x", "code")
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("gera uma imagem de um robô a tocar guitarra", ["gera uma imagem de um robô a tocar guitarra"]),
+    ("faz-me um logo e abre o Spotify", ["faz-me um logo", "abre o Spotify"]),
+    ("abre o Spotify põe música", ["abre o Spotify", "põe música"]),
+])
+def test_split_does_not_cut_infinitives(text, expected):
+    assert split_commands(text) == expected
+
+
+# --- verificação final -------------------------------------------------------
+
+from jarvis.llm import ToolCall, ToolResult  # noqa: E402
+from jarvis.verify import verify  # noqa: E402
+
+
+def _r(text, error=False):
+    return ToolResult(ToolCall("x", {}), text, is_error=error)
+
+
+def test_verify_all_ok():
+    check = verify([_r("Abri Spotify."), _r("A tocar: Queen - Bohemian Rhapsody.")])
+    assert check.ok and check.spoken() == "Terminei, correu tudo bem."
+    assert check.ui_line() == "Verificado: 2/2 ações correram bem."
+
+
+def test_verify_detects_failures_even_without_error_flag():
+    check = verify([
+        _r("Abri Spotify."),
+        _r("Carreguei no play, mas o Spotify não começou a tocar."),
+        _r("Não encontrei a conversa 'Zé' no Discord.", error=True),
+    ])
+    assert not check.ok and len(check.failures) == 2
+    assert check.spoken() == "Terminei, mas nem tudo correu bem: Carreguei no play, mas o Spotify não começou a tocar e mais 1."
+    assert verify([]) is None
