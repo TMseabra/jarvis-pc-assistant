@@ -8,6 +8,7 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
+from jarvis import followups
 from jarvis.actions.site_search import parse_site_search
 from jarvis.tools import (
     TOOL_SPECS,
@@ -186,10 +187,12 @@ class Brain:
         # "manda msg ao X no Discord" sem texto: pergunta a mensagem e a resposta seguinte é enviada.
         self.pending_send: tuple[str, str] | None = None
         self.last_unread: list[tuple[str, str]] = []  # quem tinha mensagens por ler (último check_messages)
+        self.followups: list[followups.Option] = []  # o que o Jarvis acabou de oferecer abrir
 
     def reset(self):
         self.llm.reset()
         self.pending_send = None
+        self.followups = []
 
     def _pending_or_new_send(self, text: str) -> str | None:
         """Envios em dois passos, sem depender do modelo:
@@ -216,6 +219,16 @@ class Brain:
                 result = self._run_tool(ToolCall("classroom_choose", {"choice": text.strip()}), request=text)
                 return result.content
             flow.cancel()  # outro pedido: segue normalmente
+        # "sim" / "abre elas" / "o LinkedIn" / "2" depois de o Jarvis oferecer abrir alguma coisa.
+        hit = followups.match(text, self.followups)
+        if hit:
+            kind, payload = hit
+            if kind == "ask":
+                return payload
+            self.followups = []
+            results = [self._run_tool(call, request=text) for call in payload]
+            return "\n".join(r.content for r in results)
+        self.followups = []  # a oferta anterior já não se aplica
         # Atalhos que não precisam do modelo (e que ele às vezes baralhava).
         site_query = parse_site_search(text)
         if site_query:
@@ -268,6 +281,7 @@ class Brain:
         log.info("  -> %s%s", "ERRO " if result.is_error else "", result.content[:300])
         if call.name == "check_messages" and not result.is_error:
             self.last_unread = unread_contacts(result.content)
+            self.followups = followups.message_followups(result.content)
         if self.on_tool_result:
             self.on_tool_result(result)
         return result
@@ -287,6 +301,8 @@ class Brain:
                 platform = asked.group("platform").lower()
                 contact = re.sub(r"^(?:o|a)\s+", "", asked.group("contact").strip(), flags=re.IGNORECASE)
                 self.pending_send = (platform, contact)
+            if not self.followups:
+                self.followups = followups.offer_from_reply(reply)
             return reply
 
     def _handle(self, text: str) -> str:
