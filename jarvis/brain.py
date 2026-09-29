@@ -8,7 +8,7 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
-from jarvis.tools import TOOL_SPECS, ToolExecutor, extract_dictated_message
+from jarvis.tools import TOOL_SPECS, ToolExecutor, extract_dictated_message, parse_send_target
 
 SYSTEM_PROMPT = """És o Jarvis, um assistente pessoal que controla o PC do utilizador.
 Respondes sempre em português de Portugal (tratas o utilizador por "tu", nunca por "você"), \
@@ -98,7 +98,7 @@ _ACTION_REQUEST = re.compile(
 _CLAIMS_ACTION = re.compile(
     r"\b(?:abri|abro|vou abrir|pus|ponho|vou pôr|enviei|envio|vou enviar|pesquisei|pesquiso|"
     r"vou pesquisar|toquei|mandei|liguei|fechei|vou fechar|respondi|vou responder|vou à|vou ao|"
-    r"faço com que|vou verificar|verifiquei)\b",
+    r"faço com que|vou verificar|verifiquei|enviando|a enviar|enviaste|mandaste|abriste|foi enviada)\b",
     re.IGNORECASE,
 )
 
@@ -125,6 +125,8 @@ def is_action_request(text: str) -> bool:
 
 
 MAX_STEPS = 6
+_CANCEL = re.compile(r"^\W*(?:cancela|cancelar|esquece|deixa|nada|não|nao|nope)\b", re.IGNORECASE)
+_PLATFORM_NAMES = {"discord": "Discord", "whatsapp": "WhatsApp", "telegram": "Telegram"}
 ACTION_LOCK = threading.RLock()
 
 
@@ -144,9 +146,35 @@ class Brain:
         self.approve = approve  # opcional: autorização antes de ações sensíveis (Telegram)
         if self.executor.compose is None:  # para "responde à última mensagem" sem texto ditado
             self.executor.compose = lambda contact, messages: compose_reply(self.llm, contact, messages)
+        # "manda msg ao X no Discord" sem texto: pergunta a mensagem e a resposta seguinte é enviada.
+        self.pending_send: tuple[str, str] | None = None
 
     def reset(self):
         self.llm.reset()
+        self.pending_send = None
+
+    def _pending_or_new_send(self, text: str) -> str | None:
+        """Envios em dois passos, sem depender do modelo:
+        1. "manda msg ao Rafosto no Discord" -> "Que mensagem queres enviar ao Rafosto no Discord?"
+        2. A mensagem seguinte ("ola tudo bem") é enviada tal e qual.
+        Devolve a resposta, ou None se o pedido não for isto (segue para o modelo)."""
+        if self.pending_send:
+            platform, contact = self.pending_send
+            self.pending_send = None
+            if _CANCEL.match(text):
+                return "Ok, não enviei nada."
+            if not is_action_request(text):  # outro pedido ("abre o Spotify") cancela o envio
+                result = self._run_tool(
+                    ToolCall("send_message", {"platform": platform, "contact": contact, "message": text.strip()}),
+                    request="",  # o texto é exatamente o que foi escrito
+                )
+                return result.content if not result.is_error else f"Não enviei: {result.content}"
+        target = parse_send_target(text)
+        if target and not extract_dictated_message(text):
+            self.pending_send = target
+            platform, contact = target
+            return f"Que mensagem queres enviar ao {contact} no {_PLATFORM_NAMES.get(platform, platform)}?"
+        return None
 
     def _run_tool(self, call: ToolCall, request: str) -> ToolResult:
         if self.on_tool:
@@ -173,6 +201,10 @@ class Brain:
     def handle(self, text: str) -> str:
         # Voz e Telegram usam cada um o seu Brain, mas nunca mexem no PC ao mesmo tempo.
         with ACTION_LOCK:
+            quick = self._pending_or_new_send(text)
+            if quick is not None:
+                log.info("envio em dois passos: %r -> %r", text, quick)
+                return quick
             return self._handle(text)
 
     def _handle(self, text: str) -> str:

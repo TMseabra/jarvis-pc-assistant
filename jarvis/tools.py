@@ -347,6 +347,32 @@ def extract_dictated_message(request: str) -> str | None:
     return text[0].upper() + text[1:]
 
 
+# "manda msg ao Rafosto no Discord" (sem o texto): quem e onde.
+_SEND_VERBS = r"(?:manda|mande|envia|envie|escreve|escreva|diz|diga)(?:-lhe)?"
+_TARGET_PLATFORM = r"(?P<platform>discord|whatsapp|wpp|zap|telegram)"
+_SEND_TARGET = [
+    re.compile(
+        rf"^\W*(?:(?:jarvis|por\s+favor|podes|consegues)\W+)*{_SEND_VERBS}\s+(?:uma\s+)?(?:msg|mensagem|sms)?\s*"
+        rf"(?:ao|à|a|aos|às|para\s+o|para\s+a|pro|pra)\s+(?P<contact>.+?)\s+(?:no|na|pelo|pela|por)\s+(?:o\s+)?"
+        rf"{_TARGET_PLATFORM}\W*$", re.IGNORECASE),
+    re.compile(
+        rf"^\W*(?:(?:jarvis|por\s+favor|podes|consegues)\W+)*{_SEND_VERBS}\s+(?:uma\s+)?(?:msg|mensagem|sms)?\s*"
+        rf"(?:no|na|pelo|pela|por)\s+(?:o\s+)?{_TARGET_PLATFORM}\s+(?:ao|à|a|para\s+o|para\s+a|pro|pra)\s+"
+        rf"(?P<contact>.+?)\W*$", re.IGNORECASE),
+]
+_PLATFORM_ALIASES = {"wpp": "whatsapp", "zap": "whatsapp"}
+
+
+def parse_send_target(request: str) -> tuple[str, str] | None:
+    """"manda msg ao rafosto no discord" -> ("discord", "rafosto"); None se não for isso."""
+    for pattern in _SEND_TARGET:
+        m = pattern.match(request.strip())
+        if m:
+            platform = m.group("platform").lower()
+            return _PLATFORM_ALIASES.get(platform, platform), m.group("contact").strip()
+    return None
+
+
 _REPLY_SAY = re.compile(r"\b(?:a\s+dizer|dizendo)[:,]?\s+(?:que\s+)?(.+)$", re.IGNORECASE)
 
 

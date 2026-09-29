@@ -344,3 +344,54 @@ def test_claimed_action_in_reply_is_retried_even_without_action_verb(monkeypatch
 def test_normal_answer_with_passive_words_is_not_a_claim():
     brain, _ = make_brain([StepResult("O museu está aberto até às 18h.")])
     assert brain.handle("a que horas fecha o museu?") == "O museu está aberto até às 18h."
+
+
+# --- envio em dois passos ------------------------------------------------------------
+
+@pytest.mark.parametrize("text, expected", [
+    ("manda msg ao rafosto no discord", ("discord", "rafosto")),
+    ("envia uma mensagem à Ana pelo whatsapp", ("whatsapp", "Ana")),
+    ("manda mensagem pelo discord ao Rafosto", ("discord", "Rafosto")),
+    ("jarvis, manda msg ao J no wpp", ("whatsapp", "J")),
+    ("manda ao rafosto no discord a dizer bora", None),  # já tem o texto: não é isto
+    ("abre o discord", None),
+])
+def test_parse_send_target(text, expected):
+    from jarvis.tools import parse_send_target
+    result = parse_send_target(text)
+    if expected is None:
+        assert result is None or extract_dictated_message(text)
+    else:
+        assert result == expected
+
+
+def test_two_step_send_uses_next_message_as_is():
+    messenger = FakeMessenger()
+    brain, llm = make_brain([], messenger=messenger)  # o modelo nem é chamado
+    assert brain.handle("manda msg ao rafosto no discord") == "Que mensagem queres enviar ao rafosto no Discord?"
+    brain.handle("ent bro nao vieste a escola?")
+    assert messenger.sent == [("discord", "rafosto", "ent bro nao vieste a escola?")]
+    assert brain.pending_send is None
+
+
+def test_two_step_send_can_be_cancelled():
+    messenger = FakeMessenger()
+    brain, _ = make_brain([], messenger=messenger)
+    brain.handle("manda msg ao rafosto no discord")
+    assert brain.handle("cancela") == "Ok, não enviei nada."
+    assert messenger.sent == []
+
+
+def test_two_step_send_new_command_cancels_pending(monkeypatch):
+    monkeypatch.setattr("jarvis.actions.system.open_app", lambda name: f"Abri {name}.")
+    messenger = FakeMessenger()
+    brain, _ = make_brain([StepResult("", [ToolCall("open_app", {"name": "Spotify"})]), StepResult("Abri.")],
+                          messenger=messenger)
+    brain.handle("manda msg ao rafosto no discord")
+    assert brain.handle("abre o spotify") == "Abri."
+    assert messenger.sent == []
+
+
+def test_enviando_is_a_claim():
+    brain, _ = make_brain([StepResult("Enviando mensagem para o Rafosto."), StepResult("Enviando…")])
+    assert "Não enviei" in brain.handle("diz ao rafosto no discord que já vou")

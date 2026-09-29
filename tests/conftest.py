@@ -1,6 +1,8 @@
 """Os testes não usam a configuração pessoal (.env) nem fazem ações reais no PC."""
 
 import os
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -22,7 +24,11 @@ def no_real_side_effects(monkeypatch):
     Os testes que precisam substituem estas funções por versões falsas (e isso prevalece)."""
     import webbrowser
 
+    from jarvis import contacts
     from jarvis.actions import ai_web, media, system
+
+    # Sem os contactos pessoais do utilizador (contactos.txt): cada teste começa do zero.
+    monkeypatch.setattr(contacts, "CONTACTS_FILE", Path(tempfile.mkdtemp()) / "contactos.txt")
 
     monkeypatch.setattr(os, "startfile", _blocked("abrir (os.startfile)"), raising=False)
     monkeypatch.setattr(webbrowser, "open", _blocked("abrir o browser"))
