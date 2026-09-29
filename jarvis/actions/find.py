@@ -10,9 +10,7 @@ import re
 import time
 import urllib.parse
 
-from jarvis.config import PROJECT_ROOT
 
-IMAGES_DIR = PROJECT_ROOT / ".jarvis" / "imagens"
 _BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36"
 _RESULT = re.compile(r'class="result__a" href="([^"]+)"[^>]*>(.*?)</a>', re.S)
 
@@ -64,7 +62,9 @@ def find_image(query: str, get=None, folder=None) -> str:
     import httpx
 
     query = _clean_image_query(query)
-    folder = folder or IMAGES_DIR
+    from jarvis import outputs
+
+    folder = folder or outputs.folder("Fotos")
     headers = {"User-Agent": "JarvisPC/1.0 (assistente pessoal)"}
     get = get or (lambda url, params=None: httpx.get(url, params=params, headers=headers, timeout=15,
                                                      follow_redirects=True))
@@ -82,7 +82,7 @@ def find_image(query: str, get=None, folder=None) -> str:
         if image.status_code != 200 or not kind.startswith("image/") or len(image.content) < 5000:
             continue
         ext = {"image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}.get(kind.split(";")[0], ".jpg")
-        folder.mkdir(parents=True, exist_ok=True)
+        outputs.prepare(folder)
         name = re.sub(r"[^\w-]+", "_", query)[:40] or "foto"
         path = folder / f"{name}_{time.strftime('%Y-%m-%d_%H-%M-%S')}{ext}"
         path.write_bytes(image.content)

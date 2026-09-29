@@ -36,6 +36,7 @@ def no_real_side_effects(monkeypatch):
         monkeypatch.setattr(module, "open_url", _blocked("abrir um site"))
     from jarvis.actions import site_search, windows
 
-    monkeypatch.setattr(site_search, "LAST", {})  # sem a "última pesquisa" de outro teste
+    monkeypatch.setattr(site_search, "LAST", {})
+    monkeypatch.setenv("JARVIS_OUTPUT_DIR", tempfile.mkdtemp())  # nunca escrever nas Imagens reais  # sem a "última pesquisa" de outro teste
 
     monkeypatch.setattr(windows, "focus_later", lambda *a, **k: None)  # não mexe em janelas reais

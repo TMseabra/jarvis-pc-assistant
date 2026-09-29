@@ -8,7 +8,7 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
-from jarvis import followups, music_intents
+from jarvis import followups, music_intents, overlay
 from jarvis.actions.find import parse_image_request, parse_links_request
 from jarvis.actions.site_search import parse_refine, parse_site_search
 from jarvis.tools import (
@@ -240,6 +240,9 @@ class Brain:
             return self._run_tool(ToolCall("site_search", {"site": site, "query": query}), request=text).content
         if _CLASSROOM_REQUEST.search(text):
             return self._run_tool(ToolCall("classroom_start", {}), request=text).content
+        on_screen = overlay.parse_request(text)
+        if on_screen:
+            return self._run_tool(ToolCall("show_on_screen", {"text": on_screen}), request=text).content
         if _SCREENSHOT_REQUEST.search(text):
             result = self._run_tool(ToolCall("screenshot", {}), request=text)
             return result.content

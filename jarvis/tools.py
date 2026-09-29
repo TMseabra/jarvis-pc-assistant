@@ -202,6 +202,15 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "show_on_screen",
+        "description": "Mostra um texto em grande e animado no ecrã do PC. Usa para 'diz olá no ecrã do PC'.",
+        "parameters": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "O texto a mostrar, ex.: 'Olá'."}},
+            "required": ["text"],
+        },
+    },
+    {
         "name": "web_links",
         "description": (
             "Pesquisa na net e devolve os 5 primeiros links, para o utilizador ver no chat. Usa para "
@@ -678,6 +687,10 @@ class ToolExecutor:
             return text
         if name == "lock_pc":
             return system.lock_pc()
+        if name == "show_on_screen":
+            from jarvis import overlay
+
+            return overlay.show(*_require(args, "text"))
         if name == "web_links":
             (query,) = _require(args, "query")
             if "google" in request.lower():

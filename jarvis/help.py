@@ -13,10 +13,11 @@ HELP_TEXT = """Olá, sou o Jarvis. Isto é o que sei fazer:
 🔗 "mostra-me carros da Alpina à venda" (dou-te os links)  ·  🖼 "mostra-me uma foto de um Audi"
 🔎 Sites: "no Standvirtual pesquisa Audi A3", "procura uma bicicleta no OLX", "pesquisa iphone na Worten"
 📁 PC: "abre as transferências", "abre o meu CV", "o bluetooth não funciona"
-📸 "manda-me um print do ecrã"  ·  🔒 "bloqueia o PC"
+✨ "diz olá no ecrã do PC"  ·  📸 "manda-me um print do ecrã"  ·  🔒 "bloqueia o PC"
 📬 "alguém me mandou mensagem?" (WhatsApp, Discord separado em amigos/grupos/servidores, Instagram, TikTok e LinkedIn; fecho o que abri)
 🌍 "quem ganhou o jogo do Benfica ontem?" (pesquisa na net; precisa da chave grátis do Gemini)
 🎓 "faz um trabalho" (Classroom: escolhes a turma e o trabalho, mando tudo ao Claude com PowerPoint)
 📊 "faz um gráfico das minhas horas na Steam", "faz um gráfico com…"
 
+Fotos, prints e gráficos ficam em Imagens\Jarvis (apagados ao fim de 7 dias).
 No Telegram: /ajuda mostra isto, /reiniciar carrega a versão mais recente do Jarvis."""

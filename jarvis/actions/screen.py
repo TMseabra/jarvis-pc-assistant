@@ -3,18 +3,18 @@
 from datetime import datetime
 from pathlib import Path
 
-from jarvis.config import PROJECT_ROOT
 
-SHOTS_DIR = PROJECT_ROOT / ".jarvis" / "prints"
 ATTACHMENT = "📎 "  # prefixo no resultado da ferramenta: o Telegram envia o ficheiro a seguir
 
 
-def screenshot(monitor: int = 0, folder: Path = SHOTS_DIR) -> str:
+def screenshot(monitor: int = 0, folder: Path | None = None) -> str:
     """Print de todos os ecrãs (monitor=0) ou de um (1, 2, ...)."""
     import mss
     import mss.tools
 
-    folder.mkdir(parents=True, exist_ok=True)
+    from jarvis import outputs
+
+    folder = outputs.prepare(folder or outputs.folder("Prints"))
     path = folder / f"print_{datetime.now():%Y-%m-%d_%H-%M-%S}.png"
     with mss.mss() as sct:
         monitors = sct.monitors  # [0] = todos juntos, [1..] = cada ecrã

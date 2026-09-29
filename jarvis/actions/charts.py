@@ -4,14 +4,12 @@ from datetime import datetime
 from pathlib import Path
 
 from jarvis.actions.screen import ATTACHMENT
-from jarvis.config import PROJECT_ROOT
 
-CHARTS_DIR = PROJECT_ROOT / ".jarvis" / "graficos"
 _KINDS = {"bar", "barh", "line", "pie"}
 
 
 def make_chart(title: str, labels: list[str], values: list[float], kind: str = "bar", ylabel: str = "",
-               folder: Path = CHARTS_DIR) -> str:
+               folder: Path | None = None) -> str:
     """Barras, barras horizontais, linha ou circular. Devolve o texto com o ficheiro anexado."""
     import matplotlib
 
@@ -22,7 +20,9 @@ def make_chart(title: str, labels: list[str], values: list[float], kind: str = "
         raise ValueError("Para o gráfico preciso de nomes e valores em igual número.")
     values = [float(v) for v in values]
     kind = kind if kind in _KINDS else "bar"
-    folder.mkdir(parents=True, exist_ok=True)
+    from jarvis import outputs
+
+    folder = outputs.prepare(folder or outputs.folder("Gráficos"))
     path = folder / f"grafico_{datetime.now():%Y-%m-%d_%H-%M-%S}.png"
 
     plt.style.use("dark_background")

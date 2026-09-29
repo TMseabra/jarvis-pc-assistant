@@ -82,3 +82,22 @@ def test_brain_image_and_screenshot_shortcuts(monkeypatch):
     brain.handle("podes me mostrar carros da alpina para venda")
     assert calls == [("show_image", {"query": "um audi"}), ("screenshot", {}),
                      ("web_links", {"query": "carros da alpina para venda"})]
+
+
+def test_outputs_folder_and_cleanup(tmp_path, monkeypatch):
+    import os
+    import time
+
+    from jarvis import outputs
+
+    monkeypatch.setenv("JARVIS_OUTPUT_DIR", str(tmp_path))
+    assert outputs.folder("Fotos") == tmp_path / "Fotos"
+    folder = outputs.prepare(outputs.folder("Fotos"))
+    old, new = folder / "old.jpg", folder / "new.jpg"
+    old.write_bytes(b"x")
+    new.write_bytes(b"x")
+    ten_days_ago = time.time() - 10 * 86400
+    os.utime(old, (ten_days_ago, ten_days_ago))
+    assert outputs.clean_old(folder, days=7) == 1
+    assert not old.exists() and new.exists()
+    assert outputs.clean_old(folder, days=0) == 0
