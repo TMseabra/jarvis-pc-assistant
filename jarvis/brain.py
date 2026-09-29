@@ -32,6 +32,7 @@ Claude na web); "abre o Claude" é open_app("Claude") (a app instalada), sem per
 - ler mensagens (read_messages) e responder a alguém (send_message) no WhatsApp, Telegram ou Discord;
 - responder à última mensagem recebida / às conversas por ler (reply_last_message);
 - fechar uma aplicação (close_app);
+- entrar num jogo do Roblox pelo nome (play_roblox);
 - horas jogadas na Steam, jogo com mais horas, favoritos (steam_stats);
 - abrir a última conversa do Claude/ChatGPT e mandar continuar (continue_ai_chat).
 

@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import ai_web, files, media, projects, steam, system
+from jarvis.actions import ai_web, files, media, projects, roblox, steam, system
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -173,6 +173,19 @@ TOOL_SPECS = [
             "type": "object",
             "properties": {"name": {"type": "string", "description": "Nome da aplicação."}},
             "required": ["name"],
+        },
+    },
+    {
+        "name": "play_roblox",
+        "description": (
+            "Entra num jogo (experiência) do Roblox pelo nome: pesquisa no Roblox e abre o jogo diretamente. "
+            "Usa para 'abre o jogo Greenville no Roblox', 'entra no Brookhaven', 'joga Blox Fruits'. Para abrir "
+            "só a app do Roblox usa open_app('Roblox')."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"game": {"type": "string", "description": "Nome do jogo do Roblox."}},
+            "required": ["game"],
         },
     },
     {
@@ -390,6 +403,11 @@ class ToolExecutor:
         if name == "open_project":
             (project,) = _require(args, "name")
             return projects.open_project(project, str(args.get("claude_prompt") or ""))
+        if name == "play_roblox":
+            (game,) = _require(args, "game")
+            if game.strip().lower() in ("roblox", "o roblox", "roblox player", "app do roblox"):
+                return system.open_app("Roblox")  # "abre o Roblox": só a app, sem entrar num jogo
+            return roblox.play(game)
         if name == "steam_stats":
             return steam.steam_stats(str(args.get("scope") or "all"))
         if name == "continue_ai_chat":

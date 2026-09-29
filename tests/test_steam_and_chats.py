@@ -65,3 +65,29 @@ def test_continue_last_chat(monkeypatch):
     monkeypatch.setattr(ai_web, "_type_when_focused", lambda title, text: typed.append(text) or True)
     assert "pedi" in ai_web.continue_last_chat("Claudinho")
     assert opened == ["https://claude.ai/chat/x"] and typed == ["Continua de onde ficámos."]
+
+
+from jarvis.actions import roblox  # noqa: E402
+
+
+def test_play_roblox_launches_best_match():
+    launched = []
+    search = lambda q: [{"name": "Greenville RP", "place_id": 891852901, "players": 4131}]  # noqa: E731
+    out = roblox.play("greenville", search=search, launch=launched.append)
+    assert launched == ["roblox://experiences/start?placeId=891852901"]
+    assert "Greenville RP" in out and "4131 a jogar" in out
+
+
+def test_play_roblox_not_found():
+    assert "Não encontrei" in roblox.play("xyz", search=lambda q: [], launch=lambda link: None)
+
+
+def test_play_roblox_with_just_roblox_opens_the_app(monkeypatch):
+    from jarvis.actions import system
+    from jarvis.tools import ToolExecutor
+
+    opened = []
+    monkeypatch.setattr(system, "open_app", lambda name: opened.append(name) or "Abri Roblox.")
+    monkeypatch.setattr(roblox, "play", lambda game: (_ for _ in ()).throw(AssertionError("não devia pesquisar")))
+    assert ToolExecutor().run("play_roblox", {"game": "Roblox"}) == "Abri Roblox."
+    assert opened == ["Roblox"]
