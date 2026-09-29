@@ -235,6 +235,20 @@ class DiscordDesktop(DesktopChat):
         send_keys("{ENTER}")
         return f"Mensagem enviada para {title} no Discord."
 
+    def unread_summary(self, limit: int = 5) -> str:
+        """Conversas e servidores com mensagens por ler, pela barra lateral (sem abrir nada)."""
+        window = self._find_window()
+        if window is None:
+            window = self.window()  # abre o Discord se estiver fechado
+        names = [t.element_info.name or "" for t in window.descendants(control_type="TreeItem")]
+        dm_list = self._dm_list(window)
+        if dm_list:
+            names += [i.element_info.name or "" for i in dm_list.children(control_type="ListItem")]
+        unread = discord_unread(names)[:limit]
+        if not unread:
+            return "Discord: não tens mensagens por ler."
+        return "\n".join([f"Discord ({len(unread)} com mensagens por ler):"] + [f"- {u}" for u in unread])
+
 
 # --- WhatsApp ----------------------------------------------------------------
 
@@ -247,6 +261,32 @@ def whatsapp_chat_name(item_name: str) -> str:
     """'A Princesa Sofia 💙 01:00 última mensagem' -> 'A Princesa Sofia 💙'."""
     m = _WA_TIME.search(item_name)
     return (item_name[: m.start()] if m else item_name).strip()
+
+
+def whatsapp_preview(item_name: str) -> tuple[str, str, str]:
+    """'Rafa 11:24 bora jogar?' -> ('Rafa', '11:24', 'bora jogar?')."""
+    m = _WA_TIME.search(item_name)
+    if not m:
+        return item_name.strip(), "", ""
+    for noise in ("Conversa afixada", "Conversa com estrela", "Conversa sem som"):
+        item_name = item_name.replace(noise, "")
+    return item_name[: m.start()].strip(), m.group(0).strip(), " ".join(item_name[m.end():].split())
+
+
+_DISCORD_UNREAD = re.compile(r"mensage(?:m|ns) não lida|\d+\s+men[çc][ãõa]o|men[çc][õo]es", re.IGNORECASE)
+
+
+def discord_unread(names: list[str]) -> list[str]:
+    """Da barra lateral do Discord, os sítios com mensagens por ler (já com o nome limpo)."""
+    out = []
+    for name in names:
+        if not _DISCORD_UNREAD.search(name):
+            continue
+        count = re.search(r"(\d+)\s+men[çc]", name)
+        place = re.sub(r"^(?:Mensagens não lidas,\s*|\d+\s+men[çc][ãõa]o(?:es)?,?\s*)", "", name).strip()
+        place = clean_discord_name(place) or name
+        out.append(f"{place} ({count.group(1)} menções)" if count else place)
+    return out
 
 
 class WhatsAppDesktop(DesktopChat):
@@ -408,6 +448,24 @@ class WhatsAppDesktop(DesktopChat):
             if unread:
                 self._set_filter(self._document(window), "all-filter")  # deixa a lista como estava
 
+    def unread_summary(self, limit: int = 5) -> str:
+        """As conversas por ler (filtro "Não lidas"), sem as abrir: nome, hora e início da mensagem."""
+        window = self.window()
+        doc = self._document(window)
+        if not self._set_filter(doc, "label_item_1"):
+            return "WhatsApp: não encontrei o filtro 'Não lidas'."
+        try:
+            chat_list = self._chat_list(doc)
+            items = chat_list.children(control_type="DataItem") if chat_list else []
+            previews = [whatsapp_preview(i.element_info.name or "") for i in items[:limit]]
+        finally:
+            self._set_filter(self._document(window), "all-filter")
+        if not previews:
+            return "WhatsApp: não tens mensagens por ler."
+        lines = [f"WhatsApp ({len(previews)} por ler):"]
+        lines += [f"- {name} ({time_}): {text[:80]}" if text else f"- {name} ({time_})" for name, time_, text in previews]
+        return "\n".join(lines)
+
     def reply_latest(self, message: str = "", compose=None, confirm=None) -> str | None:
         """Responde na conversa não lida mais recente. Sem `message`, `compose(nome, mensagens)`
         escreve a resposta; `confirm(plataforma, nome, texto)` pode mostrá-la antes de enviar."""
@@ -485,6 +543,25 @@ class ChatRouter:
 
     def send_message(self, platform: str, contact: str, message: str, confirm=None) -> str | None:
         return self.backend(platform).send_message(platform, contact, message, confirm=confirm)
+
+    def check_messages(self, limit: int = 5) -> str:
+        """Mensagens por ler no WhatsApp e no Discord (apps de desktop): quem, o quê e onde."""
+        parts = []
+        wa = self.backend("whatsapp")
+        if isinstance(wa, WhatsAppDesktop):
+            try:
+                parts.append(wa.unread_summary(limit))
+            except Exception as exc:
+                parts.append(f"WhatsApp: não consegui ver ({exc}).")
+        dc = self.backend("discord")
+        if isinstance(dc, DiscordDesktop):
+            try:
+                parts.append(dc.unread_summary(limit))
+            except Exception as exc:
+                parts.append(f"Discord: não consegui ver ({exc}).")
+        if not parts:
+            return "Não encontrei o WhatsApp nem o Discord de desktop instalados."
+        return "\n".join(parts)
 
     def reply_latest(self, platform: str, message: str = "", compose=None, confirm=None) -> str | None:
         backend = self.backend(platform)

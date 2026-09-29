@@ -122,7 +122,13 @@ class TelegramBot:
         if text in ("/reiniciar", "/restart"):
             from jarvis import updates
 
+            if message.get("date", 0) <= updates.STARTED:
+                # Pedido anterior a este arranque: já foi cumprido (é por causa dele que estamos aqui).
+                return
             self.send(chat, "🔄 A reiniciar o Jarvis com a versão mais recente… Dá-me uns segundos.")
+            # Confirma ao Telegram que este /reiniciar já foi lido; senão o Jarvis novo recebia-o
+            # outra vez e reiniciava em ciclo.
+            self.api.call("getUpdates", offset=self.offset, timeout=0)
             updates.restart()
             return
         self.jobs.put((text, chat))

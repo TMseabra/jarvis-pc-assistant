@@ -15,7 +15,7 @@ from jarvis.config import PROJECT_ROOT
 
 NAMES_CACHE = PROJECT_ROOT / ".jarvis" / "steam_nomes.json"
 # Apps sem página na loja.
-KNOWN_NAMES = {"480": "Spacewar (app de teste da Steam, usada por alguns jogos)"}
+KNOWN_NAMES = {"480": "Spacewar"}
 
 
 def parse_vdf(text: str) -> dict:
@@ -157,3 +157,18 @@ def steam_stats(scope: str = "all", top: int = 5, root: Path | None = None, fetc
         "Top: " + "; ".join(f"{name(a)} {_hours(m)}" for a, m in ranking[:top]) + ".",
     ]
     return " ".join(lines)
+
+
+def top_games(scope: str = "all", top: int = 10, root: Path | None = None, fetch=None) -> list[tuple[str, float]]:
+    """[(nome, horas)] dos jogos com mais horas (para gráficos)."""
+    users = user_dirs(root)
+    if not users:
+        return []
+    user = max(users, key=lambda u: sum(playtimes(u).values()))
+    times = playtimes(user)
+    if scope == "favorites":
+        favs = favorites(user)
+        times = {a: m for a, m in times.items() if a in favs}
+    ranking = sorted(times.items(), key=lambda kv: kv[1], reverse=True)[:top]
+    names = game_names([a for a, _ in ranking], root, fetch)
+    return [(names.get(a, f"jogo {a}"), m / 60) for a, m in ranking]

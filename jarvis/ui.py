@@ -37,7 +37,7 @@ _LOGO = r"""
 _ICONS = {
     "open_app": "🚀", "open_website": "🌐", "web_search": "🔎", "play_video": "▶️ ",
     "music": "🎵", "open_project": "💻", "read_messages": "📨", "send_message": "💬",
-    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠", "reply_last_message": "↩️ ", "close_app": "✖️ ", "steam_stats": "🎮", "screenshot": "📸", "list_ai_chats": "💭", "open_ai_chat": "💭", "play_roblox": "🟥", "continue_ai_chat": "💭", "open_watched_video": "🕘",
+    "ask_ai": "🎨", "open_path": "📁", "continue_work": "🛠", "reply_last_message": "↩️ ", "close_app": "✖️ ", "steam_stats": "🎮", "screenshot": "📸", "lock_pc": "🔒", "check_messages": "📬", "web_answer": "🌍", "make_chart": "📊", "list_ai_chats": "💭", "open_ai_chat": "💭", "play_roblox": "🟥", "continue_ai_chat": "💭", "open_watched_video": "🕘",
 }
 
 
@@ -67,6 +67,10 @@ def tool_label(call: ToolCall) -> str:
         "list_ai_chats": f"A ver as tuas conversas no {'ChatGPT' if a.get('site') == 'chatgpt' else 'Claude'}",
         "open_ai_chat": f"A abrir a conversa “{a.get('which', '')}”",
         "screenshot": "A tirar um print do ecrã",
+        "lock_pc": "A bloquear o PC",
+        "check_messages": "A ver se tens mensagens novas no WhatsApp e no Discord",
+        "web_answer": f"A pesquisar na internet: “{a.get('question', '')}”",
+        "make_chart": f"A fazer o gráfico “{a.get('title', '')}”",
         "steam_stats": "A ver as tuas horas na Steam" + (" (favoritos)" if a.get("scope") == "favorites" else ""),
         "continue_ai_chat": f"A abrir a tua última conversa do {'ChatGPT' if a.get('site') == 'chatgpt' else 'Claude'}",
         "open_watched_video": "A abrir o teu último vídeo do YouTube" if str(a.get("position", 1)) in ("1", "None", "")

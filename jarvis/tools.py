@@ -4,7 +4,7 @@ import re
 from collections.abc import Callable
 
 from jarvis import contacts
-from jarvis.actions import ai_web, files, media, projects, roblox, screen, steam, system
+from jarvis.actions import ai_web, charts, files, media, projects, roblox, screen, steam, system, web
 from jarvis.actions.messaging import Messenger, PLATFORMS, get_platform
 from jarvis.config import config
 
@@ -202,6 +202,50 @@ TOOL_SPECS = [
         },
     },
     {
+        "name": "lock_pc",
+        "description": "Bloqueia o PC (como Win+L). Usa para 'bloqueia o PC', 'tranca o computador'.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "check_messages",
+        "description": (
+            "Vê se o utilizador tem mensagens novas/por ler no WhatsApp e no Discord (sem as abrir): quem "
+            "mandou, o quê e onde. Usa para 'alguém me mandou mensagem?', 'tenho mensagens novas?'. Depois "
+            "pergunta se ele quer responder a alguém."
+        ),
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "web_answer",
+        "description": (
+            "Responde a perguntas que precisam de informação da internet ou atual (notícias, resultados, "
+            "preços, horários, 'quem ganhou…', 'quando sai…'): pesquisa e devolve a resposta com fontes."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"question": {"type": "string", "description": "A pergunta, completa."}},
+            "required": ["question"],
+        },
+    },
+    {
+        "name": "make_chart",
+        "description": (
+            "Faz um gráfico no PC (e envia-o no Telegram): labels e values com o mesmo número de elementos, "
+            "kind bar/barh/line/pie. Para as horas da Steam usa steam_stats com chart=true."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "labels": {"type": "array", "items": {"type": "string"}},
+                "values": {"type": "array", "items": {"type": "number"}},
+                "kind": {"type": "string", "enum": ["bar", "barh", "line", "pie"]},
+                "ylabel": {"type": "string"},
+            },
+            "required": ["title", "labels", "values"],
+        },
+    },
+    {
         "name": "steam_stats",
         "description": (
             "Vê as horas jogadas na Steam do utilizador (lê os ficheiros da Steam no PC, não precisa de "
@@ -210,7 +254,10 @@ TOOL_SPECS = [
         ),
         "parameters": {
             "type": "object",
-            "properties": {"scope": {"type": "string", "enum": ["all", "favorites"]}},
+            "properties": {
+                "scope": {"type": "string", "enum": ["all", "favorites"]},
+                "chart": {"type": "boolean", "description": "true para também fazer um gráfico."},
+            },
             "required": [],
         },
     },
@@ -514,7 +561,25 @@ class ToolExecutor:
                 monitor = 0
             return screen.screenshot(monitor)
         if name == "steam_stats":
-            return steam.steam_stats(str(args.get("scope") or "all"))
+            text = steam.steam_stats(str(args.get("scope") or "all"))
+            if str(args.get("chart") or "").lower() in ("true", "1", "sim") or "gráfico" in request.lower() \
+                    or "grafico" in request.lower():
+                top = steam.top_games(str(args.get("scope") or "all"))
+                if top:
+                    text += "\n" + charts.make_chart("As tuas horas na Steam", [n for n, _ in top],
+                                                     [round(h, 1) for _, h in top], kind="barh", ylabel="horas")
+            return text
+        if name == "lock_pc":
+            return system.lock_pc()
+        if name == "check_messages":
+            return self.messenger.check_messages()
+        if name == "web_answer":
+            return web.answer(*_require(args, "question"))
+        if name == "make_chart":
+            title = str(args.get("title") or "Gráfico")
+            labels = [str(x) for x in (args.get("labels") or [])]
+            values = list(args.get("values") or [])
+            return charts.make_chart(title, labels, values, str(args.get("kind") or "bar"), str(args.get("ylabel") or ""))
         if name == "list_ai_chats":
             return ai_web.list_chats(str(args.get("site") or "claude"))
         if name == "open_ai_chat":

@@ -151,3 +151,29 @@ def test_screenshot_is_sent_to_chat(tmp_path, monkeypatch):
     reply = controller.handle("manda-me um print", ME)
     assert sent_files == [(ME, shot)]
     assert "Tirei um print." in reply and "📎" not in reply.split("\n")[0]
+
+
+def test_restart_acknowledges_update_and_ignores_old_restart(monkeypatch):
+    from jarvis import updates
+
+    restarts = []
+    monkeypatch.setattr(updates, "restart", lambda *a, **k: restarts.append(1))
+    api = FakeAPI()
+    calls = []
+    real_call = api.call
+    api.call = lambda method, **p: calls.append((method, p)) or real_call(method, **p)
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+
+    # /reiniciar enviado ANTES deste arranque: ignorado (evita o ciclo de reinícios).
+    monkeypatch.setattr(updates, "STARTED", 10**10)
+    api.push("message", message(ME, "/reiniciar"))
+    bot.poll_once()
+    assert restarts == []
+
+    # /reiniciar novo: confirma a leitura ao Telegram ANTES de reiniciar.
+    monkeypatch.setattr(updates, "STARTED", 0)
+    api.push("message", message(ME, "/reiniciar"))
+    bot.poll_once()
+    assert restarts == [1]
+    acks = [p for m, p in calls if m == "getUpdates" and p.get("timeout") == 0]
+    assert acks and acks[-1]["offset"] == bot.offset

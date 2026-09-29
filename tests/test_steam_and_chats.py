@@ -146,3 +146,51 @@ def test_find_play_button_on_real_riot_screenshot():
     x, y = find_play_button(rgb)
     assert 250 < x < 420 and 1080 < y < 1160  # o botão vermelho "Play" em baixo à esquerda
     assert find_play_button(np.zeros((800, 1200, 3), dtype=np.uint8)) is None
+
+
+# --- mensagens novas, pesquisa na net, gráficos ----------------------------------------
+
+from jarvis.actions import charts, web  # noqa: E402
+from jarvis.actions.desktop_chat import discord_unread, whatsapp_preview  # noqa: E402
+
+
+def test_whatsapp_preview():
+    assert whatsapp_preview("Rafa 11:24 bora jogar valorant?") == ("Rafa", "11:24", "bora jogar valorant?")
+    assert whatsapp_preview("Grupo da Turma Ontem Rui: ok") == ("Grupo da Turma", "Ontem", "Rui: ok")
+
+
+def test_discord_unread():
+    names = ["Mensagens diretas", "Mensagens não lidas, Shadow Greenville", "2 menções, PRPC | Department",
+             "Amigos4", "Rafosto", "1 menção Roblox Car Scene"]
+    out = discord_unread(names)
+    assert out[0] == "Shadow Greenville" and "PRPC" in out[1] and "(2 menções)" in out[1] and len(out) == 3
+
+
+def test_make_chart(tmp_path):
+    out = charts.make_chart("Horas", ["BeamNG", "Palworld"], [474, 12], kind="barh", folder=tmp_path)
+    png = next(tmp_path.glob("*.png"))
+    assert png.stat().st_size > 5000 and str(png) in out
+
+
+def test_web_answer_without_key_opens_search(monkeypatch):
+    opened = []
+    monkeypatch.setattr(web, "open_url", opened.append)
+    monkeypatch.setattr(web.config, "gemini_api_key", None, raising=False) if False else None
+    out = web.answer("quem ganhou ontem?") if not web.config.gemini_api_key else "sem chave: saltado"
+    if opened:
+        assert "google.com/search" in opened[0] and "chave" in out
+
+
+def test_web_answer_with_fake_gemini():
+    class Resp:
+        text = "O Benfica ganhou 2-0."
+        candidates = []
+
+    class Client:
+        class models:
+            @staticmethod
+            def generate_content(**kwargs):
+                assert kwargs["config"].tools[0].google_search is not None
+                return Resp()
+
+    assert web.answer("quem ganhou?", client=Client()) == "O Benfica ganhou 2-0."

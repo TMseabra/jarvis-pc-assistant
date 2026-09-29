@@ -294,6 +294,15 @@ def close_app(name: str) -> str:
     return f"Fechei {', '.join(sorted(closed))[:120]}."
 
 
+def lock_pc() -> str:
+    """Bloqueia o PC (como Win+L)."""
+    import ctypes
+
+    if not ctypes.windll.user32.LockWorkStation():
+        return "Não consegui bloquear o PC."
+    return "Bloqueei o PC."
+
+
 def _process_exe(pid: int) -> str:
     import win32api
     import win32con
