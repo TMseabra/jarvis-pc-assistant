@@ -8,7 +8,7 @@
 |---|---|
 | ![HUD a falar](docs/images/jarvis-hud-a-falar.png) | ![HUD a processar](docs/images/jarvis-hud-a-processar.png) |
 
-> As imagens mostram a janela com uma conversa de exemplo.
+
 
 ## O que faz
 
