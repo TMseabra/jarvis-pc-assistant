@@ -26,6 +26,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\create_shortcu
 where ollama >nul 2>nul && (
     echo A descarregar o modelo do Ollama, se ainda nao existir...
     ollama pull qwen2.5:7b
+    echo A descarregar o modelo de visao ^(fotos do Telegram^)...
+    ollama pull qwen2.5vl:7b
 ) || (
     echo Nota: o Ollama nao esta instalado. Instala em https://ollama.com ou usa o Gemini ^(ver README^).
 )

@@ -244,3 +244,106 @@ def test_live_screen_numbers_and_order():
     assert live_screen_number("mostra o ecrã 3 ao vivo") == 3 and live_screen_number("ecrã ao vivo") == 0
     mons = [{"left": -1920, "top": 0}, {"left": 1920, "top": 0}, {"left": -1920, "top": 0}, {"left": 0, "top": 0}]
     assert [m["left"] for m in screens(mons)] == [-1920, 0, 1920]
+
+
+# --- fotos: ver, resumir, explicar e guardar ---------------------------------------
+
+def photo_message(caption=""):
+    msg = message(ME, "")
+    msg.pop("text")
+    msg["photo"] = [{"file_id": "x"}]
+    if caption:
+        msg["caption"] = caption
+    return msg
+
+
+def test_photo_requests_are_recognised():
+    from jarvis import photos
+
+    assert photos.wants_analysis("faz um resumo disto")
+    assert photos.wants_analysis("explica melhor")
+    assert not photos.wants_analysis("macaco a dançar")
+    assert photos.wants_follow_up("explica melhor")
+    assert photos.wants_follow_up("lê isto")
+    assert not photos.wants_follow_up("lê as mensagens do WhatsApp")
+
+
+def test_photo_with_request_is_analysed_not_saved_as_meme(monkeypatch):
+    api = FakeAPI()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    calls = []
+    monkeypatch.setattr(bot, "analyze_photo", lambda chat, media, req: calls.append((media, req)))
+    monkeypatch.setattr(bot, "save_meme", lambda *a: calls.append("meme"))
+    api.push("message", photo_message("resume isto"))
+    api.push("message", photo_message())
+    bot.poll_once()
+    time.sleep(0.2)
+    assert ({"file_id": "x"}, "resume isto") in calls and "meme" in calls
+
+
+def test_follow_up_text_uses_last_photo(monkeypatch):
+    api = FakeAPI()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    calls = []
+    monkeypatch.setattr(bot, "analyze_photo", lambda chat, media, req: calls.append((media, req)))
+    api.push("message", message(ME, "explica melhor"))
+    bot.poll_once()
+    assert list(bot.jobs.queue) == [("explica melhor", ME)]  # sem foto recente: pedido normal
+    bot.photo.remember(b"img", ".jpg")
+    api.push("message", message(ME, "explica melhor"))
+    bot.poll_once()
+    time.sleep(0.2)
+    assert calls == [(None, "explica melhor")]
+
+
+def test_photo_with_text_is_read_once_then_answered_by_the_text_model(tmp_path, monkeypatch):
+    from jarvis import photos
+
+    monkeypatch.setenv("JARVIS_OUTPUT_DIR", str(tmp_path))
+    memory = photos.PhotoMemory()
+    memory.remember(b"img", ".jpg")
+    reads, answers = [], iter(["resumo", "mais detalhe"])
+    read = lambda image: reads.append(1) or "Texto do documento sobre o resumo académico e as suas regras."
+    seen = []
+    respond = lambda text, question, previous: seen.append((text[:5], previous)) or next(answers)
+    assert memory.analyze("resume", read=read, answer_text=respond) == "resumo"
+    assert memory.analyze("explica melhor", read=read, answer_text=respond) == "mais detalhe"
+    assert reads == [1]  # a foto só é lida uma vez
+    assert seen == [("Texto", ""), ("Texto", "resumo")]  # o 2.º pedido sabe o que já foi dito
+    text = memory.path.with_suffix(".txt").read_text(encoding="utf-8")
+    assert "Texto do documento" in text and "resumo" in text and "mais detalhe" in text
+
+
+def test_photo_without_text_goes_to_the_vision_model(tmp_path, monkeypatch):
+    from jarvis import photos
+
+    monkeypatch.setenv("JARVIS_OUTPUT_DIR", str(tmp_path))
+    memory = photos.PhotoMemory()
+    memory.remember(b"img", ".jpg")
+    answer = memory.analyze("o que é isto?", read=lambda image: "", ask=lambda image, q, prev: "Um gato.")
+    assert answer == "Um gato."
+
+
+def group_message(text):
+    msg = message(ME, text)
+    msg["chat"] = {"id": -100, "type": "supergroup"}
+    return msg
+
+
+def test_group_only_answers_when_called_by_name():
+    api = FakeAPI()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    for text in ("ola pessoal", "o jarvis é fixe", "Jarvis, abre o Spotify", "Ei Jarvis abre a calculadora",
+                 "@openjarvis_tomas_bot abre o Chrome"):
+        api.push("message", group_message(text))
+    bot.poll_once()
+    assert list(bot.jobs.queue) == [("abre o Spotify", -100), ("abre a calculadora", -100), ("abre o Chrome", -100)]
+    assert api.sent == []  # às outras mensagens nem se responde
+
+
+def test_private_chat_does_not_need_the_name():
+    api = FakeAPI()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    api.push("message", message(ME, "abre o Spotify"))
+    bot.poll_once()
+    assert list(bot.jobs.queue) == [("abre o Spotify", ME)]

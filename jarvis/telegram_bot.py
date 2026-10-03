@@ -17,6 +17,7 @@ from collections.abc import Callable
 
 import httpx
 
+from jarvis import photos
 from jarvis.log import log
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -99,6 +100,8 @@ class TelegramAPI:
 MEME_LINK = re.compile(r"https?://(?:www\.)?(?:tenor\.com|giphy\.com|media\d*\.giphy\.com|media\d*\.tenor\.com|"
                        r"i\.imgur\.com|imgur\.com)/\S+", re.IGNORECASE)
 LIVE_SECONDS = 60
+GROUP_MENTION = re.compile(r"@\w+bot\b", re.IGNORECASE)  # menção ao bot nos grupos
+GROUP_CALL = re.compile(r"^\W*(?:(?:ei|hey|ol[aá]|boas)\W+)?jarvis\b[\s,:;.!-]*", re.IGNORECASE)
 
 
 def live_screen_number(text: str) -> int:
@@ -157,6 +160,7 @@ class TelegramBot:
         self._pending: dict[str, dict] = {}  # confirmações à espera de resposta
         self.stop = threading.Event()
         self.live_stop = threading.Event()  # /parar acaba o ecrã ao vivo
+        self.photo = photos.PhotoMemory()  # última foto recebida, para "explica melhor"
 
     # --- receber -------------------------------------------------------------
 
@@ -170,15 +174,39 @@ class TelegramBot:
             elif "message" in update:
                 self._on_message(update["message"])
 
+    @staticmethod
+    def _addressed(text: str) -> str:
+        """"Jarvis, abre o Spotify" / "@bot abre o Spotify" / "/ajuda@bot" -> só o pedido."""
+        return GROUP_MENTION.sub("", GROUP_CALL.sub("", text)).strip()
+
     def _on_message(self, message: dict):
         user = (message.get("from") or {}).get("id")
         chat = (message.get("chat") or {}).get("id")
         text = (message.get("text") or "").strip()
+        if (message.get("chat") or {}).get("type") in ("group", "supergroup"):
+            spoken = text or (message.get("caption") or "")
+            if not (GROUP_CALL.match(spoken) or GROUP_MENTION.search(spoken)):
+                return  # nos grupos só responde a "Jarvis, ..." ou a @menções
+            log.info("Telegram: mensagem no grupo %s de %s: %r", chat, user, spoken[:80])
+            text = self._addressed(text)
+            if message.get("caption"):
+                message = {**message, "caption": self._addressed(message["caption"])}
         if user not in self.allowed_ids:
             log.warning("Telegram: mensagem ignorada de um utilizador não autorizado (%s)", user)
             return
         media = message.get("animation") or message.get("document") or \
             (message["photo"][-1] if message.get("photo") else None)
+        caption = (message.get("caption") or "").strip()
+        is_image = bool(media) and not message.get("animation") and \
+            (bool(message.get("photo")) or (media.get("mime_type") or "").startswith("image/"))
+        if is_image and photos.wants_analysis(caption):
+            threading.Thread(target=self.analyze_photo, args=(chat, media, caption), daemon=True,
+                             name="foto").start()
+            return
+        if text and self.photo.fresh and photos.wants_follow_up(text):
+            threading.Thread(target=self.analyze_photo, args=(chat, None, text), daemon=True,
+                             name="foto").start()
+            return
         if media or MEME_LINK.search(text):
             threading.Thread(target=self.save_meme, args=(chat, message, media), daemon=True).start()
             return
@@ -237,6 +265,8 @@ class TelegramBot:
                     return
                 data, file_path = self.api.download(media["file_id"])
                 ext = "." + file_path.rsplit(".", 1)[-1] if "." in file_path else ".jpg"
+                if mime.startswith("image/") and not message.get("animation"):
+                    self.photo.remember(data, ext)  # "explica isto" a seguir analisa esta foto
                 path = memes.save_meme(data, name or f"meme {time.strftime('%d-%m %H-%M-%S')}", ext)
             else:
                 url = MEME_LINK.search(message.get("text", "")).group(0)
@@ -247,6 +277,27 @@ class TelegramBot:
             return
         self.send(chat, f"😂 Guardei o meme \"{path.stem}\". Diz \"mete o meme {path.stem} na tela\" para o pôr no ecrã. "
                         "(Se escreveres uma legenda na foto, fica com esse nome.)")
+
+    # --- fotos para ver, resumir e explicar ------------------------------------------
+
+    def analyze_photo(self, chat: int, media: dict | None, request: str):
+        """Foto nova (com legenda a pedir algo) ou a última foto (texto a seguir) -> resposta do modelo de visão."""
+        try:
+            self.api.call("sendChatAction", chat_id=chat, action="typing")
+            if media:
+                data, file_path = self.api.download(media["file_id"])
+                ext = "." + file_path.rsplit(".", 1)[-1] if "." in file_path else ".jpg"
+                self.photo.remember(data, ext)
+                answer = self.photo.analyze(request)
+                note = f"\n\n💾 Guardei a foto e a resposta em \"{self.photo.path.parent.name}\"."
+            else:
+                answer = self.photo.analyze(request)
+                note = ""
+        except Exception as exc:
+            log.warning("Telegram: foto: %s", exc)
+            self.send(chat, f"Não consegui ver a foto: {exc}")
+            return
+        self.send(chat, (answer or "Não consegui tirar nada da imagem.") + note)
 
     # --- ecrã ao vivo ----------------------------------------------------------
 

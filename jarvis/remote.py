@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 
+from jarvis import guard
 from jarvis.actions.desktop_chat import ChatRouter
 from jarvis.actions.screen import attachments
 from jarvis.actions.messaging import Messenger
@@ -52,6 +53,8 @@ class TelegramController:
                            approve=self._approve)
         if config.confirm_ai_replies:
             executor.confirm_ai = self._confirm_reply
+        self.guard_chat: int | None = None  # onde avisar se o code red bloquear o PC
+        guard.instance.listeners.append(self._on_code_red)
 
     def _on_tool(self, call: ToolCall):
         if self.ui:
@@ -73,8 +76,17 @@ class TelegramController:
         ok = self.bot.confirm(self._chat, "\n".join([f"Responder a {contact} ({platform}) com:", f"«{message}»"]))
         return message if ok else None
 
+    def _on_code_red(self):
+        if self.guard_chat is not None:
+            try:
+                self.bot.send(self.guard_chat, "🚨 Code red: alguém mexeu no teclado ou no rato. Bloqueei o PC.")
+            except Exception as exc:
+                log.warning("Telegram: não avisei do code red: %s", exc)
+
     def handle(self, text: str, chat: int) -> str:
         log.info("telegram: %r", text)
+        if guard.parse(text) == "arm":
+            self.guard_chat = chat
         if self.ui:
             self.ui.info(f"📱 Pedido pelo Telegram: {text}")
         self._chat = chat

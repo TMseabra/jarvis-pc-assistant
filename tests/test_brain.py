@@ -403,3 +403,20 @@ def test_screenshot_and_help_shortcuts_skip_the_model(monkeypatch):
     assert brain.handle("Podes me manda foto no que esta na tela") == "Tirei um print de todos os ecrãs."
     assert brain.handle("Mostra me a tela") == "Tirei um print de todos os ecrãs."
     assert "sei fazer" in brain.handle("podes me dizer o que ele ja faz?")
+
+
+def test_photo_of_what_was_just_said(monkeypatch):
+    from jarvis.actions import find
+
+    seen = []
+    monkeypatch.setattr(find, "find_image", lambda query, *a: seen.append(query) or f"Foto de {query}")
+    brain, llm = make_brain([StepResult(text="O de morango é mais doce, eu escolho esse.")])
+    llm.complete = lambda system, prompt: "gelado de morango\n"
+    assert "morango" in brain.handle("qual é melhor, gelado de menta ou de morango?")
+    assert brain.handle("manda foto desse") == "Foto de gelado de morango"
+    assert seen == ["gelado de morango"]
+
+
+def test_photo_of_that_without_context_goes_to_the_model():
+    brain, llm = make_brain([StepResult(text="De que queres a foto?")] * 2)
+    assert brain.handle("manda foto desse") == "De que queres a foto?"

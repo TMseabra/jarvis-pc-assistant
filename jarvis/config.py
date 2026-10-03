@@ -40,6 +40,8 @@ class Config:
     ollama_host: str | None = field(default_factory=lambda: os.getenv("OLLAMA_HOST"))
     gemini_model: str = field(default_factory=lambda: _env("JARVIS_GEMINI_MODEL", "gemini-3.8-flash"))
     gemini_api_key: str | None = field(default_factory=lambda: os.getenv("GEMINI_API_KEY"))
+    # Modelo de visão (Ollama) para ler as fotos que mandas pelo Telegram: ollama pull qwen2.5vl:7b
+    vision_model: str = field(default_factory=lambda: _env("JARVIS_VISION_MODEL", "qwen2.5vl:7b"))
     # Nº de pedidos que o modelo recorda (incluindo o atual). None = predefinição do provider.
     max_turns: int | None = field(default_factory=lambda: _int_env("JARVIS_MAX_TURNS", 0) or None)
     language: str = field(default_factory=lambda: _env("JARVIS_LANGUAGE", "pt-PT"))

@@ -8,7 +8,7 @@ from jarvis.actions.messaging import MessagingError
 from jarvis.config import config
 from jarvis.llm import ChatProvider, LLMError, ToolCall, ToolResult, create_provider
 from jarvis.log import log
-from jarvis import followups, memes, music_intents, overlay, understand
+from jarvis import followups, guard, memes, music_intents, overlay, understand
 from jarvis.actions import diagnostics, vscode
 from jarvis.power_intents import parse_power
 from jarvis.actions.find import parse_image_request, parse_links_request
@@ -135,6 +135,25 @@ def compose_reply(llm: ChatProvider, contact: str, messages: str) -> str:
     return text
 
 
+# "manda foto desse", "mostra uma imagem disso", "e uma foto dele?": a foto do que o Jarvis acabou de dizer.
+_PHOTO_OF_THAT = re.compile(
+    r"\b(?:foto|fotografia|imagem)s?\s+(?:d(?:esse|essa|isso|aquele|aquela|aquilo|ele|ela)|do\s+(?:escolhido|vencedor)|"
+    r"d[ao]\s+que\s+escolheste)\b|\b(?:desse|dessa|disso)\b.*\b(?:foto|imagem)\b",
+    re.IGNORECASE,
+)
+SUBJECT_SYSTEM = """Recebes uma pergunta do utilizador e a resposta do assistente. O utilizador vai agora pedir uma foto "disso". Diz apenas o nome curto da coisa a que ele se refere: se a resposta escolheu uma opção entre várias, essa opção (ex.: "gelado de morango"). Responde só com o nome, sem pontuação nem frases. Se não der para saber, responde NENHUM."""
+
+
+def photo_subject(llm: ChatProvider, question: str, answer: str) -> str | None:
+    """Do que fala a última resposta ("qual é melhor, menta ou morango?" -> "morango")."""
+    prompt = f"Pergunta: {question}\nResposta: {answer}\n\nQual é a coisa de que o utilizador quer a foto?"
+    line = (llm.complete(SUBJECT_SYSTEM, prompt).strip().splitlines() or [""])[0]
+    subject = line.strip().strip('"\'`*.!').strip()
+    if not subject or len(subject) > 60 or subject.upper().startswith("NENHUM"):
+        return None
+    return subject
+
+
 def is_action_request(text: str) -> bool:
     return bool(_ACTION_REQUEST.match(text))
 
@@ -191,9 +210,11 @@ class Brain:
         self.pending_send: tuple[str, str] | None = None
         self.last_unread: list[tuple[str, str]] = []  # quem tinha mensagens por ler (último check_messages)
         self.followups: list[followups.Option] = []  # o que o Jarvis acabou de oferecer abrir
+        self.last_exchange: tuple[str, str] | None = None  # (pedido, resposta) anteriores, para "foto desse"
 
     def reset(self):
         self.llm.reset()
+        self.last_exchange = None
         self.pending_send = None
         self.followups = []
 
@@ -250,6 +271,9 @@ class Brain:
             return vs_reply
         if diagnostics.REQUEST.search(text):
             return self._run_tool(ToolCall("pc_status", {}), request=text).content
+        code_red = guard.parse(text)
+        if code_red:
+            return guard.instance.arm() if code_red == "arm" else guard.instance.disarm()
         power = parse_power(text)
         if power:
             action, question = power
@@ -397,7 +421,10 @@ class Brain:
             if quick is not None:
                 log.info("envio em dois passos: %r -> %r", text, quick)
                 return quick
-            reply = _FAKE_IMAGE.sub("", self._handle(text)).strip()
+            reply = self._photo_of_previous(text)
+            if reply is None:
+                reply = _FAKE_IMAGE.sub("", self._handle(text)).strip()
+            self.last_exchange = (text, reply)
             # O modelo perguntou ele próprio o texto ("Escreve o que queres dizer ao X no WhatsApp"):
             # a próxima mensagem é para enviar a essa pessoa, tal e qual.
             asked = _ASKS_MESSAGE.search(reply)
@@ -408,6 +435,20 @@ class Brain:
             if not self.followups:
                 self.followups = followups.offer_from_reply(reply, text)
             return reply
+
+    def _photo_of_previous(self, text: str) -> str | None:
+        """"Manda foto desse": descobre o que o Jarvis escolheu na resposta anterior e procura a foto disso."""
+        if not self.last_exchange or not _PHOTO_OF_THAT.search(text):
+            return None
+        try:
+            subject = photo_subject(self.llm, *self.last_exchange)
+        except LLMError:
+            return None
+        if not subject:
+            return None
+        log.info("foto do que foi dito antes: %r", subject)
+        result = self._run_tool(ToolCall("show_image", {"query": subject}), text)
+        return result.content
 
     def _handle(self, text: str) -> str:
         """Processa um comando do utilizador e devolve a resposta final do Jarvis.
