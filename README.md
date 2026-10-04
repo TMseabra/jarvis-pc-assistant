@@ -9,7 +9,6 @@
 | ![HUD a falar](docs/images/jarvis-hud-a-falar.png) | ![HUD a processar](docs/images/jarvis-hud-a-processar.png) |
 
 
-
 ## O que faz
 
 ### ✨ No ecrã do PC
