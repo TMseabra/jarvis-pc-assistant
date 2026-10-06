@@ -2,6 +2,7 @@
 
 **Controla o computador por voz ou texto, em português de Portugal.** Abre apps, jogos e sites, põe música, lê e responde a mensagens no WhatsApp, Discord e Telegram, faz pesquisas, mostra memes no ecrã, diz como está o PC e aceita pedidos à distância pelo Telegram. O modelo de linguagem corre no teu PC (Ollama) ou na cloud (Gemini).
 
+
 ![Janela do Jarvis a falar](docs/images/jarvis-hud-a-falar.png)
 
 | A falar (o equalizador mexe com a voz) | A processar um pedido |
