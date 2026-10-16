@@ -8,16 +8,19 @@ Segurança:
   chat com botões ✅/❌; sem resposta em 2 minutos, não faz.
 """
 
+import json
 import queue
 import re
 import secrets
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import httpx
 
-from jarvis import photos
+from jarvis import photos, updates
+from jarvis.help import HELP_TEXT
 from jarvis.log import log
 
 API = "https://api.telegram.org/bot{token}/{method}"
@@ -49,8 +52,6 @@ class TelegramAPI:
 
     def send_file(self, chat: int, path, caption: str = ""):
         """Imagens como foto (se o Telegram aceitar), o resto como ficheiro."""
-        from pathlib import Path
-
         path = Path(path)
         is_image = path.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
         attempts = [("sendPhoto", "photo")] if is_image and path.stat().st_size < 10_000_000 else []
@@ -78,8 +79,6 @@ class TelegramAPI:
         return result["result"]
 
     def edit_photo_bytes(self, chat: int, message_id: int, data: bytes, caption: str = "") -> dict:
-        import json
-
         media = {"type": "photo", "media": "attach://ecra", "caption": caption}
         response = self.http.post(API.format(token=self.token, method="editMessageMedia"),
                                   data={"chat_id": chat, "message_id": message_id, "media": json.dumps(media)},
@@ -234,13 +233,9 @@ class TelegramBot:
                             "Se ainda quiseres, manda outra vez.")
             return
         if text in ("/start", "/help", "/ajuda"):
-            from jarvis.help import HELP_TEXT
-
             self.send(chat, HELP_TEXT)
             return
         if text in ("/reiniciar", "/restart"):
-            from jarvis import updates
-
             if message.get("date", 0) <= updates.STARTED:
                 # Pedido anterior a este arranque: já foi cumprido (é por causa dele que estamos aqui).
                 return
@@ -389,8 +384,6 @@ class TelegramBot:
             except Exception as exc:
                 log.exception("Telegram: erro a tratar %r", text)
                 reply = f"Erro: {exc}"
-            from jarvis import updates
-
             if updates.newer_code_available():
                 reply += "\n\n" + updates.NOTICE
             self.send(chat, reply)
