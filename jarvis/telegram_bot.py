@@ -304,8 +304,9 @@ class TelegramBot:
 
     def analyze_photo(self, chat: int, media: dict | None, request: str):
         """Foto nova (com legenda a pedir algo) ou a última foto (texto a seguir) -> resposta do modelo de visão."""
+        done = threading.Event()
+        threading.Thread(target=self._keep_typing, args=(chat, done), daemon=True, name="a-escrever").start()
         try:
-            self.api.call("sendChatAction", chat_id=chat, action="typing")
             if media:
                 data, file_path = self.api.download(media["file_id"])
                 ext = "." + file_path.rsplit(".", 1)[-1] if "." in file_path else ".jpg"
@@ -322,7 +323,18 @@ class TelegramBot:
             log.warning("Telegram: foto: %s", exc)
             self.send(chat, f"Não consegui ver a foto: {exc}")
             return
+        finally:
+            done.set()
         self.send(chat, (answer or "Não consegui tirar nada da imagem.") + note)
+
+    def _keep_typing(self, chat: int, done: threading.Event, every: float = 4.0):
+        """O "a escrever…" do Telegram dura 5 s: renova-o enquanto o Jarvis trabalha numa resposta demorada."""
+        while not done.is_set():
+            try:
+                self.api.call("sendChatAction", chat_id=chat, action="typing")
+            except Exception:
+                return
+            done.wait(every)
 
     # --- ecrã ao vivo ----------------------------------------------------------
 

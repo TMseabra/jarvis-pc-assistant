@@ -426,3 +426,23 @@ def test_meme_captions_and_chat_are_not_mistaken_for_photo_requests():
         assert not photos.wants_follow_up(text), text
     assert photos.wants_analysis("jarvis isto ta certo? faz me resumo disso")
     assert photos.wants_analysis("pontos importantes") and photos.wants_follow_up("traduz isto")
+
+
+def test_typing_is_renewed_while_a_photo_is_analysed(monkeypatch):
+    class Api(FakeAPI):
+        actions = 0
+
+        def call(self, method, **params):
+            if method == "sendChatAction":
+                self.actions += 1
+            return super().call(method, **params)
+
+    api = Api()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    done = threading.Event()
+    thread = threading.Thread(target=bot._keep_typing, args=(ME, done, 0.05))
+    thread.start()
+    time.sleep(0.3)
+    done.set()
+    thread.join(timeout=2)
+    assert api.actions >= 3 and not thread.is_alive()
