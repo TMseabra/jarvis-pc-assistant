@@ -364,3 +364,12 @@ def test_big_photos_are_shrunk_before_vision():
     Image.new("RGB", (200, 100)).save(tiny, "PNG")
     assert photos.shrink(tiny.getvalue()) == tiny.getvalue()  # pequenas ficam como estão
     assert photos.shrink(b"nao e imagem") == b"nao e imagem"
+
+
+def test_very_long_photo_text_is_trimmed_not_silently_cut(monkeypatch):
+    from jarvis import photos
+
+    sent = []
+    monkeypatch.setattr(photos, "_chat", lambda model, messages, *a, **k: sent.append(messages) or "ok")
+    photos.respond("x" * 50_000, "resume")
+    assert "texto cortado" in sent[0][1]["content"] and len(sent[0][1]["content"]) < photos.MAX_TEXT + 200
