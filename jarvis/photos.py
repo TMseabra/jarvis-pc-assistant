@@ -164,7 +164,8 @@ class PhotoMemory:
     """A última foto recebida (na memória), para "explica melhor" sem mandar a foto outra vez."""
 
     def __init__(self):
-        self.image: bytes | None = None
+        self.image: bytes | None = None  # original (é o que se guarda)
+        self.view: bytes | None = None  # versão reduzida, a que o modelo vê
         self.ext = ".jpg"
         self.answer = ""
         self.text: str | None = None  # texto lido da foto (None = ainda não lido; "" = sem texto)
@@ -173,6 +174,7 @@ class PhotoMemory:
 
     def remember(self, image: bytes, ext: str):
         self.image, self.ext, self.answer, self.text, self.path, self.when = image, ext, "", None, None, time.time()
+        self.view = shrink(image)
 
     @property
     def fresh(self) -> bool:
@@ -181,11 +183,11 @@ class PhotoMemory:
     def analyze(self, question: str, ask=ask_vision, read=read_text, answer_text=respond) -> str:
         """Lê o texto da foto (uma vez), faz o que pediste com ele e guarda tudo ao lado da foto."""
         if self.text is None:
-            self.text = read(self.image)
+            self.text = read(self.view)
         if self.text:  # documento/texto: o modelo normal resume e explica melhor do que o de visão
             answer = answer_text(self.text, question, self.answer)
         else:  # foto de uma cena: o modelo de visão responde diretamente
-            answer = ask(self.image, question or DEFAULT_ASK, self.answer)
+            answer = ask(self.view, question or DEFAULT_ASK, self.answer)
         if self.path is None:
             self.path = save(self.image, self.ext, question, answer, text=self.text)
         else:
