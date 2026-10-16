@@ -96,14 +96,27 @@ TEXT_SYSTEM = ("És o Jarvis, assistente pessoal. Respondes em português de Por
 MIN_TEXT = 40  # menos do que isto: é uma foto de uma cena, não de um documento
 
 
-def _chat(model: str, messages: list, client=None, temperature: float = 0.3) -> str:
+_client = None
+
+
+def _ollama():
+    """Um só cliente (e ligação HTTP) para todas as fotos, em vez de um novo por pedido."""
+    global _client
+    if _client is None:
+        import ollama
+
+        _client = ollama.Client(host=config.ollama_host)
+    return _client
+
+
+def _chat(model: str, messages: list, client=None, temperature: float = 0.3, keep_alive: str = "10m") -> str:
     import httpx
     import ollama
 
-    client = client or ollama.Client(host=config.ollama_host)
+    client = client or _ollama()
     try:
         response = client.chat(model=model, messages=messages,
-                               options={"temperature": temperature, "num_ctx": 8192}, keep_alive="10m")
+                               options={"temperature": temperature, "num_ctx": 8192}, keep_alive=keep_alive)
     except ollama.ResponseError as exc:
         if exc.status_code == 404:
             raise LLMError(f"O modelo '{model}' não está instalado. Corre no PC: ollama pull {model}") from exc
