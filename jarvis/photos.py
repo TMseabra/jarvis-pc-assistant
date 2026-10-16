@@ -47,6 +47,27 @@ def wants_follow_up(text: str) -> bool:
     return bool(FOLLOW_UP_REQUEST.search(text or ""))
 
 
+MAX_SIDE = 1568  # lado maior: acima disto o modelo de visão não ganha nada e demora muito mais
+
+
+def shrink(image: bytes, max_side: int = MAX_SIDE) -> bytes:
+    """Reduz fotos grandes (ex.: enviadas como ficheiro, 4000 px) antes de as dar ao modelo de visão."""
+    import io
+
+    from PIL import Image, ImageOps
+
+    try:
+        img = ImageOps.exif_transpose(Image.open(io.BytesIO(image)))
+    except Exception:
+        return image  # não é uma imagem que o Pillow abra: segue tal e qual
+    if max(img.size) <= max_side:
+        return image
+    img.thumbnail((max_side, max_side))
+    out = io.BytesIO()
+    img.convert("RGB").save(out, "JPEG", quality=88)
+    return out.getvalue()
+
+
 def folder():
     path = outputs.folder("Fotos recebidas")  # nunca é limpa: são as tuas
     path.mkdir(parents=True, exist_ok=True)

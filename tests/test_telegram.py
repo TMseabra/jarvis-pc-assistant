@@ -347,3 +347,20 @@ def test_private_chat_does_not_need_the_name():
     api.push("message", message(ME, "abre o Spotify"))
     bot.poll_once()
     assert list(bot.jobs.queue) == [("abre o Spotify", ME)]
+
+
+def test_big_photos_are_shrunk_before_vision():
+    import io
+
+    from PIL import Image
+
+    from jarvis import photos
+
+    big = io.BytesIO()
+    Image.new("RGB", (4000, 3000), "white").save(big, "PNG")
+    small = Image.open(io.BytesIO(photos.shrink(big.getvalue())))
+    assert max(small.size) == photos.MAX_SIDE
+    tiny = io.BytesIO()
+    Image.new("RGB", (200, 100)).save(tiny, "PNG")
+    assert photos.shrink(tiny.getvalue()) == tiny.getvalue()  # pequenas ficam como estão
+    assert photos.shrink(b"nao e imagem") == b"nao e imagem"
