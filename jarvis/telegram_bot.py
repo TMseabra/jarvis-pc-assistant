@@ -119,21 +119,32 @@ def screens(monitors: list[dict]) -> list[dict]:
     return sorted(monitors[1:], key=lambda m: (m["left"], m["top"]))
 
 
+_grabber = threading.local()
+
+
+def _screen_grabber():
+    """Uma captura (mss) por thread, reutilizada: criar uma nova a cada frame é o que atrasava o ecrã ao vivo."""
+    if not hasattr(_grabber, "sct"):
+        import mss
+
+        _grabber.sct = mss.mss()
+    return _grabber.sct
+
+
 def grab_screen_jpeg(screen: int = 0, width: int | None = None, quality: int = 60) -> bytes:
     """Print em JPEG pequeno (rápido de enviar): screen=0 são todos os ecrãs juntos, 1, 2, 3... um só."""
     import io
 
-    import mss
     from PIL import Image
 
-    with mss.mss() as sct:
-        mons = screens(sct.monitors)
-        area = sct.monitors[0] if screen <= 0 or screen > len(mons) else mons[screen - 1]
-        shot = sct.grab(area)
+    sct = _screen_grabber()
+    mons = screens(sct.monitors)
+    area = sct.monitors[0] if screen <= 0 or screen > len(mons) else mons[screen - 1]
+    shot = sct.grab(area)
     img = Image.frombytes("RGB", shot.size, shot.rgb)
     width = width or (2400 if screen <= 0 else 1280)
     if img.width > width:
-        img = img.resize((width, int(img.height * width / img.width)))
+        img = img.resize((width, int(img.height * width / img.width)), Image.BILINEAR)
     buffer = io.BytesIO()
     img.save(buffer, "JPEG", quality=quality)
     return buffer.getvalue()
