@@ -391,3 +391,27 @@ def test_send_puts_buttons_only_on_the_last_part():
     bot = TelegramBot(api, {ME}, lambda t, c: "ok")
     bot.send(ME, "a" * 5000 + " fim", reply_markup={"inline_keyboard": []})
     assert len(api.sent) == 2 and "reply_markup" not in api.sent[0] and "reply_markup" in api.sent[1]
+
+
+def test_photos_are_analysed_one_at_a_time(monkeypatch):
+    class Api(FakeAPI):
+        def download(self, file_id):
+            return b"img", "photos/a.jpg"
+
+    api = Api()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    running, peak = [0], [0]
+
+    def slow_analyze(question):
+        running[0] += 1
+        peak[0] = max(peak[0], running[0])
+        time.sleep(0.15)
+        running[0] -= 1
+        bot.photo.path = type("P", (), {"parent": type("D", (), {"name": "Fotos"})()})()
+        return "ok"
+
+    monkeypatch.setattr(bot.photo, "analyze", slow_analyze)
+    threads = [threading.Thread(target=bot.analyze_photo, args=(ME, {"file_id": "x"}, "resume")) for _ in range(3)]
+    [t.start() for t in threads]
+    [t.join(timeout=5) for t in threads]
+    assert peak[0] == 1

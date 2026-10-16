@@ -185,6 +185,7 @@ class TelegramBot:
         self.stop = threading.Event()
         self.live_stop = threading.Event()  # /parar acaba o ecrã ao vivo
         self.photo = photos.PhotoMemory()  # última foto recebida, para "explica melhor"
+        self.photo_lock = threading.Lock()
 
     # --- receber -------------------------------------------------------------
 
@@ -286,7 +287,8 @@ class TelegramBot:
                 data, file_path = self.api.download(media["file_id"])
                 ext = "." + file_path.rsplit(".", 1)[-1] if "." in file_path else ".jpg"
                 if mime.startswith("image/") and not message.get("animation"):
-                    self.photo.remember(data, ext)  # "explica isto" a seguir analisa esta foto
+                    with self.photo_lock:
+                        self.photo.remember(data, ext)  # "explica isto" a seguir analisa esta foto
                 path = memes.save_meme(data, name or f"meme {time.strftime('%d-%m %H-%M-%S')}", ext)
             else:
                 url = MEME_LINK.search(message.get("text", "")).group(0)
@@ -307,11 +309,14 @@ class TelegramBot:
             if media:
                 data, file_path = self.api.download(media["file_id"])
                 ext = "." + file_path.rsplit(".", 1)[-1] if "." in file_path else ".jpg"
-                self.photo.remember(data, ext)
-                answer = self.photo.analyze(request)
-                note = f"\n\n💾 Guardei a foto e a resposta em \"{self.photo.path.parent.name}\"."
+                with self.photo_lock:  # uma foto de cada vez: dois modelos a correr juntos não cabem na placa gráfica
+                    self.photo.remember(data, ext)
+                    answer = self.photo.analyze(request)
+                    folder = self.photo.path.parent.name
+                note = f"\n\n💾 Guardei a foto e a resposta em \"{folder}\"."
             else:
-                answer = self.photo.analyze(request)
+                with self.photo_lock:
+                    answer = self.photo.analyze(request)
                 note = ""
         except Exception as exc:
             log.warning("Telegram: foto: %s", exc)
