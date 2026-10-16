@@ -140,6 +140,20 @@ def grab_screen_jpeg(screen: int = 0, width: int | None = None, quality: int = 6
     return buffer.getvalue()
 
 
+def split_message(text: str, limit: int = 4000) -> list[str]:
+    """Parte o texto em pedaços até `limit`, de preferência numa quebra de linha ou num espaço."""
+    parts = []
+    while len(text) > limit:
+        cut = text.rfind("\n", 0, limit)
+        if cut < limit // 2:
+            cut = text.rfind(" ", 0, limit)
+        if cut < limit // 2:
+            cut = limit
+        parts.append(text[:cut].rstrip())
+        text = text[cut:].lstrip()
+    return parts + [text or "…"]
+
+
 def parse_allowed_ids(raw: str) -> set[int]:
     return {int(x) for x in raw.replace(";", ",").split(",") if x.strip().lstrip("-").isdigit()}
 
@@ -341,7 +355,11 @@ class TelegramBot:
     # --- enviar / confirmar --------------------------------------------------
 
     def send(self, chat: int, text: str, **extra):
-        return self.api.call("sendMessage", chat_id=chat, text=text[:4000], **extra)
+        """Respostas com mais de 4000 caracteres (limite do Telegram) vão em várias mensagens."""
+        parts = split_message(text)
+        for part in parts[:-1]:
+            self.api.call("sendMessage", chat_id=chat, text=part)
+        return self.api.call("sendMessage", chat_id=chat, text=parts[-1], **extra)  # botões só na última
 
     def confirm(self, chat: int, question: str, timeout: float = 120) -> bool:
         key = secrets.token_hex(4)

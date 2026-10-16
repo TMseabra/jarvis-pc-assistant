@@ -373,3 +373,21 @@ def test_very_long_photo_text_is_trimmed_not_silently_cut(monkeypatch):
     monkeypatch.setattr(photos, "_chat", lambda model, messages, *a, **k: sent.append(messages) or "ok")
     photos.respond("x" * 50_000, "resume")
     assert "texto cortado" in sent[0][1]["content"] and len(sent[0][1]["content"]) < photos.MAX_TEXT + 200
+
+
+def test_long_replies_are_split_not_cut():
+    from jarvis.telegram_bot import split_message
+
+    assert split_message("curto") == ["curto"]
+    text = "\n".join(f"linha {i} " + "x" * 90 for i in range(100))  # ~9500 caracteres
+    parts = split_message(text)
+    assert len(parts) == 3 and all(len(p) <= 4000 for p in parts)
+    assert "\n".join(parts).replace("\n", " ").split() == text.replace("\n", " ").split()  # nada se perde
+    assert len(split_message("y" * 9000)) == 3  # sem espaços: corta a direito
+
+
+def test_send_puts_buttons_only_on_the_last_part():
+    api = FakeAPI()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    bot.send(ME, "a" * 5000 + " fim", reply_markup={"inline_keyboard": []})
+    assert len(api.sent) == 2 and "reply_markup" not in api.sent[0] and "reply_markup" in api.sent[1]
