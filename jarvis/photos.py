@@ -15,9 +15,11 @@ from jarvis.llm.base import LLMError
 
 # Pedidos que querem que o Jarvis olhe para a foto (senão a foto é guardada como meme).
 ANALYZE_REQUEST = re.compile(
-    r"\b(?:resum\w*|explic\w*|descrev\w*|analis\w*|l[eê]\w*|traduz\w*|v[eê]\w*|olha\w*|"
-    r"o\s+que\s+(?:[eé]|diz|está|esta|significa|tem)|que\s+(?:[eé]|diz)|diz-?me|conta-?me|"
-    r"mais\s+(?:detalhe|pormenor)\w*|melhor|extrai|copia\s+o\s+texto|guarda\s+isto)\b",
+    r"\b(?:resum\w*|explic\w*|descrev\w*|analis\w*|traduz\w*|transcrev\w*|extrai|"
+    r"pontos?\s+(?:importantes?|principais|chave)|mais\s+(?:detalhe|pormenor)\w*|copia\s+o\s+texto|guarda\s+isto|"
+    r"(?:l[eê]|ler|l[eê]s|v[eê]|ver|v[eê]s|olha|olhar)(?:-?me)?|"
+    r"o\s+que\s+(?:[eé]|diz|est[aá]|significa|tem)|que\s+(?:[eé]|diz)|diz-?me|conta-?me|"
+    r"isto\s+(?:est[aá]|ta)\s+(?:certo|correto|bem|errado))\b",
     re.IGNORECASE,
 )
 
@@ -30,9 +32,10 @@ FOLLOW_UP_SECONDS = 15 * 60
 
 # Texto a seguir a uma foto: mais apertado, para "lê as mensagens" não ser confundido com a foto.
 FOLLOW_UP_REQUEST = re.compile(
-    r"\b(?:resum\w*|explic\w*|descrev\w*|analis\w*|traduz\w*|detalh\w*|pormenor\w*|extrai|melhor|"
+    r"\b(?:resum\w*|explic\w*|descrev\w*|analis\w*|traduz\w*|transcrev\w*|extrai|"
+    r"pontos?\s+(?:importantes?|principais|chave)|mais\s+(?:detalhe|pormenor)\w*|"
     r"o\s+que\s+(?:[eé]|diz|significa)\s+(?:isto|isso|aqui)|"
-    r"(?:l[eê]|v[eê]|olha|copia)\w*\s+(?:isto|isso|a\s+foto|a\s+imagem|o\s+print)|guarda\s+isto)\b",
+    r"(?:l[eê]|ler|v[eê]|ver|olha|olhar|copia)(?:-?me)?\s+(?:isto|isso|a\s+foto|a\s+imagem|o\s+print)|guarda\s+isto)\b",
     re.IGNORECASE,
 )
 

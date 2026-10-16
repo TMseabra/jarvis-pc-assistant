@@ -415,3 +415,14 @@ def test_photos_are_analysed_one_at_a_time(monkeypatch):
     [t.start() for t in threads]
     [t.join(timeout=5) for t in threads]
     assert peak[0] == 1
+
+
+def test_meme_captions_and_chat_are_not_mistaken_for_photo_requests():
+    from jarvis import photos
+
+    for caption in ("vem aí", "melhor meme", "verdade", "a vez do macaco", "lembra-te", "macaco a dançar"):
+        assert not photos.wants_analysis(caption), caption
+    for text in ("qual é melhor, menta ou morango?", "lembra isto", "lê as mensagens do WhatsApp"):
+        assert not photos.wants_follow_up(text), text
+    assert photos.wants_analysis("jarvis isto ta certo? faz me resumo disso")
+    assert photos.wants_analysis("pontos importantes") and photos.wants_follow_up("traduz isto")
