@@ -13,8 +13,21 @@ STARTED = time.time()
 CODE_DIR = PROJECT_ROOT / "jarvis"
 
 
+CHECK_EVERY = 10.0  # segundos entre verificações (percorrer a pasta a cada resposta é desperdício)
+_found = False
+_last_check = 0.0
+
+
 def newer_code_available(since: float = STARTED) -> bool:
-    return any(p.stat().st_mtime > since + 1 for p in CODE_DIR.rglob("*.py"))
+    global _found, _last_check
+    if _found:  # o código só fica mais novo: depois de detetado, não volta atrás
+        return True
+    now = time.monotonic()
+    if now - _last_check < CHECK_EVERY:
+        return False
+    _last_check = now
+    _found = any(p.stat().st_mtime > since + 1 for p in CODE_DIR.rglob("*.py"))
+    return _found
 
 
 NOTICE = "🔄 Há uma versão nova do Jarvis. Manda /reiniciar (ou fecha e abre o Jarvis) para a usar."
