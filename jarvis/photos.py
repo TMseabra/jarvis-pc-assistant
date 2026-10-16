@@ -142,8 +142,7 @@ MAX_TEXT = 14000  # caracteres: cabe no contexto de 8192 tokens; acima disto o O
 def respond(text: str, question: str, previous: str = "", client=None) -> str:
     """Faz o que pediste com o texto da foto (modelo normal, melhor a resumir e explicar)."""
     if len(text) > MAX_TEXT:
-        text = text[:MAX_TEXT] + "
-[... texto cortado por ser muito grande]"
+        text = text[:MAX_TEXT] + "\n[... texto cortado por ser muito grande]"
     messages = [{"role": "system", "content": TEXT_SYSTEM},
                 {"role": "user", "content": f'Texto da foto:\n"""\n{text}\n"""'}]
     if previous:
