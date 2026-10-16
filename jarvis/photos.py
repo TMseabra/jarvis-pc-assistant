@@ -47,6 +47,9 @@ def wants_follow_up(text: str) -> bool:
     return bool(FOLLOW_UP_REQUEST.search(text or ""))
 
 
+# O modelo de visão (~6 GB) sai da memória logo a seguir: numa placa de 8 GB não cabe ao lado do modelo de texto.
+VISION_KEEP_ALIVE = "0"
+
 MAX_SIDE = 1568  # lado maior: acima disto o modelo de visão não ganha nada e demora muito mais
 
 
@@ -83,7 +86,7 @@ def ask_vision(image: bytes, question: str, previous: str = "", client=None) -> 
                      {"role": "user", "content": question}]
     else:
         messages.append({"role": "user", "content": question or DEFAULT_ASK, "images": [image]})
-    return _chat(config.vision_model, messages, client)
+    return _chat(config.vision_model, messages, client, keep_alive=VISION_KEEP_ALIVE)
 
 
 READ_PROMPT = ("Transcreve TODO o texto que aparece nesta imagem, tal e qual, pela ordem em que se lê, sem "
@@ -129,7 +132,7 @@ def _chat(model: str, messages: list, client=None, temperature: float = 0.3, kee
 def read_text(image: bytes, client=None) -> str:
     """O texto que está na foto (modelo de visão); "" se não tiver texto que se leia."""
     text = _chat(config.vision_model, [{"role": "user", "content": READ_PROMPT, "images": [image]}],
-                 client, temperature=0.0)
+                 client, temperature=0.0, keep_alive=VISION_KEEP_ALIVE)
     return "" if text.upper().startswith("SEM TEXTO") or len(text) < MIN_TEXT else text
 
 
