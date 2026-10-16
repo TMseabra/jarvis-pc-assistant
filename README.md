@@ -71,7 +71,13 @@
 ### 📱 Telegram (à distância)
 - Qualquer pedido acima, escrito ao teu bot.
 - **/aovivo**: os ecrãs do PC quase em tempo real (a foto atualiza a cada 2 s durante 1 minuto); **/aovivo 2** só o 2.º ecrã; **/parar** acaba.
+- **Fotos com texto**: manda uma foto com a legenda "resume isto", "pontos importantes" ou "explica melhor". O Jarvis lê o texto da foto (modelo de visão) e faz o que pediste com ele (modelo normal). Texto solto a seguir ("explica melhor", "traduz") continua na mesma foto durante 15 minutos. A foto e a resposta ficam em `Jarvis\Fotos recebidas`. Fotos sem pedido continuam a ser guardadas como memes.
+- **"Manda foto desse"**: depois de uma resposta como "o de morango é melhor", o Jarvis percebe de que coisa falava e procura a foto.
+- **Grupos**: o bot só responde a mensagens que começam por "Jarvis" (ou o mencionam com @), e só a utilizadores autorizados. Desliga o modo de privacidade no @BotFather (`/setprivacy` → Disable) e volta a adicionar o bot ao grupo.
 - **/ajuda**: a lista de comandos; **/reiniciar**: carrega a versão mais recente do Jarvis.
+
+### 🚨 Code red
+Diz "Jarvis, code red" (voz ou Telegram): passados 5 segundos, se alguém tocar numa tecla ou mexer no rato, o PC bloqueia (Win+L) e recebes um aviso no Telegram. O que o próprio Jarvis faz no PC não conta. "Code green" desliga.
 
 ### Respostas curtas
 Depois de o Jarvis oferecer alguma coisa, podes responder só "sim", "quero", "mete uma dessas", "2", "a segunda" ou "não": ele lembra-se do que estavam a falar.
@@ -126,6 +132,7 @@ Preferes o terminal? `Jarvis.bat --terminal` (escolhes Escrever, Falar ou Mãos-
 |---|---|---|
 | `JARVIS_PROVIDER` | `ollama` | `ollama` ou `gemini` |
 | `JARVIS_OLLAMA_MODEL` | `qwen2.5:7b` | Modelo do Ollama (tem de suportar tools) |
+| `JARVIS_VISION_MODEL` | `qwen2.5vl:7b` | Modelo de visão para ler fotos (`ollama pull qwen2.5vl:7b`; ~6 GB, sai da memória logo a seguir a usar) |
 | `GEMINI_API_KEY` | — | Chave do Gemini (também para respostas com pesquisa na net) |
 | `JARVIS_GEMINI_MODEL` | `gemini-3.8-flash` | Modelo do Gemini |
 | `JARVIS_BROWSER` | `default` | `opera`, `chrome`, `firefox`, `brave`, `edge` ou caminho do .exe |
@@ -171,7 +178,8 @@ jarvis/
   ducking.py         # baixar o som das outras apps enquanto fala
   understand.py      # corrige nomes mal ouvidos/escritos, gralhas e hesitações
   voice.py           # microfone, Whisper, "Hey Jarvis", voz neural
-  telegram_bot.py remote.py  # controlo pelo Telegram (+ /aovivo)
+  telegram_bot.py remote.py  # controlo pelo Telegram (+ /aovivo, fotos)
+  photos.py guard.py         # fotos com texto (visão + resumo); code red (bloqueia o PC)
   llm/               # Ollama e Gemini com a mesma interface
   actions/           # apps, jogos, Spotify, YouTube, WhatsApp/Discord, sites, Classroom, diagnóstico…
 tests/               # pytest (419 testes)
