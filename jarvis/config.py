@@ -71,6 +71,8 @@ class Config:
     duck_level: float = field(default_factory=lambda: _float_env("JARVIS_DUCK", 0.2))
     # Mãos-livres: segundos depois de responder em que aceita frases sem "Jarvis" (0 = nunca).
     follow_up_seconds: float = field(default_factory=lambda: _float_env("JARVIS_FOLLOW_UP", 0))
+    # Code red: segundos para te afastares antes de o teclado/rato passarem a ser vigiados.
+    code_red_grace: float = field(default_factory=lambda: _float_env("JARVIS_CODE_RED_GRACE", 5))
     # Ao abrir uma app, maximizá-la e pô-la à frente (JARVIS_MAXIMIZE=0 desliga).
     maximize_windows: bool = field(default_factory=lambda: _env("JARVIS_MAXIMIZE", "1") not in ("0", "false", "nao"))
     messaging: str = field(default_factory=lambda: _env("JARVIS_MESSAGING", "auto").lower())

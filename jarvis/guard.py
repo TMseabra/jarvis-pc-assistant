@@ -11,9 +11,8 @@ import re
 import threading
 import time
 
+from jarvis.config import config
 from jarvis.log import log
-
-GRACE_SECONDS = 5.0
 
 _ARM = re.compile(r"\bc[oó]d(?:e|igo)?\s*[-_]?\s*(?:red|vermelho)\b", re.IGNORECASE)
 _DISARM = re.compile(
@@ -32,8 +31,9 @@ def parse(text: str) -> str | None:
     return None
 
 
-def should_lock(armed_at: float | None, now: float, injected: bool, grace: float = GRACE_SECONDS) -> bool:
+def should_lock(armed_at: float | None, now: float, injected: bool, grace: float | None = None) -> bool:
     """Um evento de teclado/rato bloqueia se o code red está ativo, já passou a margem e foi uma pessoa."""
+    grace = config.code_red_grace if grace is None else grace
     return armed_at is not None and not injected and now - armed_at >= grace
 
 
@@ -57,7 +57,7 @@ class Guard:
         self.armed_at = time.monotonic()
         self._start_hooks()
         log.info("code red ativado")
-        return (f"🔴 Code red ativo dentro de {int(GRACE_SECONDS)} segundos. Afasta-te do teclado e do rato: "
+        return (f"🔴 Code red ativo dentro de {int(config.code_red_grace)} segundos. Afasta-te do teclado e do rato: "
                 "se alguém lhes tocar, bloqueio o PC. Diz \"code green\" para desligar.")
 
     def disarm(self) -> str:

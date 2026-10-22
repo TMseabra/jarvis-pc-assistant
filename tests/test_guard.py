@@ -44,3 +44,15 @@ def test_disarm(monkeypatch):
     g.arm()
     assert "desativado" in g.disarm()
     assert not g.armed
+
+
+def test_grace_period_comes_from_the_config():
+    from jarvis.config import config
+
+    old = config.code_red_grace
+    object.__setattr__(config, "code_red_grace", 30.0)  # a Config é imutável: repõe-se no fim
+    try:
+        assert not should_lock(10, 20, injected=False)  # 10 s < 30 s
+        assert should_lock(10, 45, injected=False)
+    finally:
+        object.__setattr__(config, "code_red_grace", old)
