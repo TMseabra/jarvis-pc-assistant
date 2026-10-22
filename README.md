@@ -143,6 +143,7 @@ Preferes o terminal? `Jarvis.bat --terminal` (escolhes Escrever, Falar ou Mãos-
 | `JARVIS_FOLLOW_UP` | `0` | Segundos depois de responder em que aceita frases sem "Jarvis" |
 | `JARVIS_WAKE_THRESHOLD` | `0.3` | Sensibilidade do "Hey Jarvis" (0 desliga) |
 | `JARVIS_END_SILENCE` | `3` | Segundos de silêncio que terminam a gravação |
+| `JARVIS_CODE_RED_GRACE` | `5` | Segundos para te afastares depois de dizeres "code red" |
 | `JARVIS_MAXIMIZE` | `1` | Abrir as apps maximizadas |
 | `JARVIS_KEEP_DAYS` | `7` | Dias até apagar fotos, prints e gráficos (0 = nunca) |
 | `JARVIS_OUTPUT_DIR` | Ambiente de Trabalho\Jarvis | Outra pasta para o que o Jarvis cria |
