@@ -20,7 +20,7 @@ HELP_TEXT = """Olá, sou o Jarvis. Isto é o que sei fazer:
 🎓 "faz um trabalho" (Classroom: escolhes a turma e o trabalho, mando tudo ao Claude com PowerPoint)
 📊 "faz um gráfico das minhas horas na Steam", "faz um gráfico com…"
 🖼️ Fotos no Telegram: manda uma foto com "resume isto", "pontos importantes" ou "explica melhor" (leio o texto da foto e faço o que pedires; "explica melhor" a seguir continua na mesma foto). Guardo a foto e a resposta em Jarvis\\Fotos recebidas. "Manda foto desse" mostra a foto do que acabei de escolher.
-🚨 "code red": se alguém tocar no teclado ou no rato, o PC bloqueia (tens 5 segundos para te afastares; "code green" desliga).
+🚨 "code red": se alguém tocar no teclado ou no rato, o PC bloqueia (tens 5 segundos para te afastares; "code green" desliga; no Telegram também /codered e /codegreen).
 👥 Em grupos do Telegram só respondo a mensagens que começam por "Jarvis".
 
 Fotos, prints e gráficos ficam em Ambiente de Trabalho\\Jarvis (apagados ao fim de 7 dias).

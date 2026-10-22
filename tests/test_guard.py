@@ -10,6 +10,8 @@ def test_parse_code_red_and_green():
     assert guard.parse("code green") == "disarm"
     assert guard.parse("desativa o code red") == "disarm"
     assert guard.parse("abre o spotify") is None
+    assert guard.parse("/codered") == "arm" and guard.parse("/codegreen") == "disarm"  # atalhos do Telegram
+    assert guard.parse("abre o codeblocks") is None
 
 
 def test_only_people_after_the_grace_period_lock():
