@@ -541,3 +541,20 @@ def test_screens_are_numbered_left_to_right():
 
     monitors = [{"left": -1920, "top": 0}, {"left": 1920, "top": 0}, {"left": 0, "top": 0}]  # [0] = todos juntos
     assert [m["left"] for m in screens(monitors)] == [0, 1920]  # o 1 é o da esquerda
+
+
+def test_group_photos_need_the_name_in_the_caption(monkeypatch):
+    api = FakeAPI()
+    bot = TelegramBot(api, {ME}, lambda t, c: "ok")
+    analysed, memes = [], []
+    monkeypatch.setattr(bot, "analyze_photo", lambda chat, media, req: analysed.append(req))
+    monkeypatch.setattr(bot, "save_meme", lambda *a: memes.append(1))
+    for caption in ("Jarvis, resume isto", "resume isto", ""):
+        msg = photo_message(caption)
+        msg["chat"] = {"id": -100, "type": "group"}
+        api.push("message", msg)
+    bot.poll_once()
+    time.sleep(0.2)
+    assert analysed == ["resume isto"]  # o "Jarvis" sai do pedido
+    assert memes == []  # fotos de grupo sem o nome nem são guardadas como memes
+    assert api.sent == []
