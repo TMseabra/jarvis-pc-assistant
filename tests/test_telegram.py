@@ -523,3 +523,21 @@ def test_saved_text_file_keeps_the_text_read_from_the_photo(tmp_path):
     path = photos.save(b"x", ".jpg", "resume", "o resumo", dest=tmp_path, text="texto lido da foto")
     saved = path.with_suffix(".txt").read_text(encoding="utf-8")
     assert "texto lido da foto" in saved and "o resumo" in saved and "resume" in saved
+
+
+def test_live_screen_requests_and_screen_numbers():
+    from jarvis.telegram_bot import LIVE_REQUEST, live_screen_number
+
+    assert live_screen_number("/aovivo") == 0  # sem número: todos os ecrãs
+    assert live_screen_number("/aovivo 2") == 2
+    assert live_screen_number("mostra o ecrã 3 ao vivo") == 3
+    assert live_screen_number("vê o monitor 1") == 1
+    assert LIVE_REQUEST.search("mostra o meu pc em direto")
+    assert not LIVE_REQUEST.search("abre o spotify")
+
+
+def test_screens_are_numbered_left_to_right():
+    from jarvis.telegram_bot import screens
+
+    monitors = [{"left": -1920, "top": 0}, {"left": 1920, "top": 0}, {"left": 0, "top": 0}]  # [0] = todos juntos
+    assert [m["left"] for m in screens(monitors)] == [0, 1920]  # o 1 é o da esquerda
