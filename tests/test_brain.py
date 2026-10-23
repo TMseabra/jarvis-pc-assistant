@@ -420,3 +420,30 @@ def test_photo_of_what_was_just_said(monkeypatch):
 def test_photo_of_that_without_context_goes_to_the_model():
     brain, llm = make_brain([StepResult(text="De que queres a foto?")] * 2)
     assert brain.handle("manda foto desse") == "De que queres a foto?"
+
+
+def test_photo_of_that_is_only_for_references_to_the_last_answer():
+    from jarvis.brain import _PHOTO_OF_THAT as pattern
+
+    for text in ("manda foto desse", "manda uma foto disso", "mostra uma imagem dele", "quero uma foto desse carro"):
+        assert pattern.search(text), text
+    # pedidos com assunto próprio ou do ecrã não são "foto do que disseste"
+    for text in ("manda foto do Audi", "mostra uma foto de um gato", "manda-me uma foto do meu ecrã"):
+        assert not pattern.search(text), text
+
+
+def test_photo_subject_cleans_the_model_answer():
+    from jarvis.brain import photo_subject
+
+    class Llm:
+        def __init__(self, reply):
+            self.reply = reply
+
+        def complete(self, system, prompt):
+            return self.reply
+
+    assert photo_subject(Llm('"gelado de morango".'), "q", "a") == "gelado de morango"
+    assert photo_subject(Llm("morango\nporque é mais doce"), "q", "a") == "morango"  # só a 1.ª linha
+    assert photo_subject(Llm("NENHUM"), "q", "a") is None
+    assert photo_subject(Llm(""), "q", "a") is None
+    assert photo_subject(Llm("x" * 80), "q", "a") is None  # uma frase inteira não é um assunto
