@@ -446,3 +446,55 @@ def test_typing_is_renewed_while_a_photo_is_analysed(monkeypatch):
     done.set()
     thread.join(timeout=2)
     assert api.actions >= 3 and not thread.is_alive()
+
+
+# --- fotos: erros do Ollama e leitura do texto --------------------------------------
+
+class FakeVisionClient:
+    def __init__(self, reply="", error=None):
+        self.reply, self.error, self.calls = reply, error, []
+
+    def chat(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.error:
+            raise self.error
+        return type("R", (), {"message": type("M", (), {"content": self.reply})()})()
+
+
+def test_missing_vision_model_is_explained():
+    import ollama
+    import pytest
+
+    from jarvis import photos
+    from jarvis.llm import LLMError
+
+    client = FakeVisionClient(error=ollama.ResponseError("model not found", 404))
+    with pytest.raises(LLMError, match="ollama pull"):
+        photos.ask_vision(b"img", "o que é?", client=client)
+
+
+def test_ollama_down_is_explained():
+    import pytest
+
+    from jarvis import photos
+    from jarvis.llm import LLMError
+
+    with pytest.raises(LLMError, match="ollama serve"):
+        photos.ask_vision(b"img", "o que é?", client=FakeVisionClient(error=ConnectionError("recusada")))
+
+
+def test_vision_model_is_unloaded_right_after_use():
+    from jarvis import photos
+
+    client = FakeVisionClient("Um gato.")
+    assert photos.ask_vision(b"img", "o que é?", client=client) == "Um gato."
+    assert client.calls[0]["keep_alive"] == photos.VISION_KEEP_ALIVE
+
+
+def test_read_text_ignores_pictures_without_text():
+    from jarvis import photos
+
+    assert photos.read_text(b"img", client=FakeVisionClient("SEM TEXTO")) == ""
+    assert photos.read_text(b"img", client=FakeVisionClient("ok")) == ""  # demasiado curto: é uma cena
+    long = "Um texto de verdade, com várias palavras, que ocupa mais de quarenta caracteres."
+    assert photos.read_text(b"img", client=FakeVisionClient(long)) == long
