@@ -498,3 +498,28 @@ def test_read_text_ignores_pictures_without_text():
     assert photos.read_text(b"img", client=FakeVisionClient("ok")) == ""  # demasiado curto: é uma cena
     long = "Um texto de verdade, com várias palavras, que ocupa mais de quarenta caracteres."
     assert photos.read_text(b"img", client=FakeVisionClient(long)) == long
+
+
+def test_saved_photos_never_overwrite_each_other(tmp_path):
+    from jarvis import photos
+
+    first = photos.save(b"1", ".jpg", "resume", "resposta 1", name="CV", dest=tmp_path)
+    second = photos.save(b"2", ".jpg", "resume", "resposta 2", name="CV", dest=tmp_path)
+    assert first != second and first.read_bytes() == b"1" and second.read_bytes() == b"2"
+    assert "resposta 2" in second.with_suffix(".txt").read_text(encoding="utf-8")
+
+
+def test_saved_photo_names_are_safe_for_windows(tmp_path):
+    from jarvis import photos
+
+    path = photos.save(b"x", "png", "pedido", "ok", name='a<b>:c"/d\e|f?g*', dest=tmp_path)
+    assert path.exists() and path.suffix == ".png"
+    assert not set('<>:"/\|?*') & set(path.name)
+
+
+def test_saved_text_file_keeps_the_text_read_from_the_photo(tmp_path):
+    from jarvis import photos
+
+    path = photos.save(b"x", ".jpg", "resume", "o resumo", dest=tmp_path, text="texto lido da foto")
+    saved = path.with_suffix(".txt").read_text(encoding="utf-8")
+    assert "texto lido da foto" in saved and "o resumo" in saved and "resume" in saved
