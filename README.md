@@ -11,6 +11,7 @@
 
 
 
+
 ## O que faz
 
 ### ✨ No ecrã do PC
@@ -164,6 +165,17 @@ Preferes o terminal? `Jarvis.bat --terminal` (escolhes Escrever, Falar ou Mãos-
 ## Fiabilidade com modelos locais
 
 Os pedidos mais comuns (música, mensagens, memes, pesquisas em sites, desligar o PC, diagnóstico, respostas curtas) são reconhecidos diretamente, sem depender do modelo. Para o resto, se o modelo responder "abri o Spotify" sem ter feito nada, o Jarvis tenta outra vez só com o pedido atual e, se mesmo assim nada for feito, diz que não conseguiu. No fim de cada pedido confere o resultado de todas as ações ("Verificado: 2/2 ações correram bem").
+
+## Problemas comuns
+
+| Problema | O que fazer |
+|---|---|
+| "O modelo de visão não está instalado" ao mandar uma foto | `ollama pull qwen2.5vl:7b` (~6 GB). Depois manda a foto outra vez: o pedido que falhou não se repete sozinho |
+| O bot não responde no grupo | No @BotFather: `/setprivacy` → escolhe o bot (com o `@nome_do_bot` exato) → **Disable**; remove o bot do grupo e volta a adicioná-lo. No grupo só responde a mensagens que começam por "Jarvis" |
+| "Há uma versão nova do Jarvis" | Manda `/reiniciar` (ou fecha e abre o Jarvis): um programa só lê o código quando arranca |
+| "Não consegui ativar o code red" | O Windows recusou vigiar o teclado e o rato (por exemplo, por causa de um antivírus). O Jarvis não finge que está ativo |
+| Fotos e respostas lentas | Com 8 GB de RAM ou pouca VRAM, usa um modelo mais pequeno (`JARVIS_OLLAMA_MODEL=qwen2.5:3b`) ou o Gemini. O modelo de visão sai da memória logo a seguir a cada foto |
+| "Já há outro Jarvis a ler o Telegram" | O Telegram só deixa um leitor por bot. Fecha o outro Jarvis ou usa um segundo bot (outro token) |
 
 ## Estrutura
 
