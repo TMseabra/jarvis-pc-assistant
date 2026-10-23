@@ -512,9 +512,9 @@ def test_saved_photos_never_overwrite_each_other(tmp_path):
 def test_saved_photo_names_are_safe_for_windows(tmp_path):
     from jarvis import photos
 
-    path = photos.save(b"x", "png", "pedido", "ok", name='a<b>:c"/d\e|f?g*', dest=tmp_path)
+    path = photos.save(b"x", "png", "pedido", "ok", name='a<b>:c"/d\\e|f?g*', dest=tmp_path)
     assert path.exists() and path.suffix == ".png"
-    assert not set('<>:"/\|?*') & set(path.name)
+    assert not set('<>:"/|?*\\') & set(path.name)
 
 
 def test_saved_text_file_keeps_the_text_read_from_the_photo(tmp_path):
