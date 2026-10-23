@@ -25,7 +25,7 @@ def test_lock_happens_once_and_notifies(monkeypatch):
     locked, told = [], []
     g = Guard(lock=lambda: locked.append(1))
     g.listeners.append(lambda: told.append(1))
-    monkeypatch.setattr(g, "_start_hooks", lambda: None)
+    monkeypatch.setattr(g, "_start_hooks", lambda: setattr(g, "hooks_ok", True))
     monkeypatch.setattr(g, "_stop_hooks", lambda: None)
     g.arm()
     g.armed_at -= 10  # a margem já passou
@@ -41,7 +41,7 @@ def test_lock_happens_once_and_notifies(monkeypatch):
 
 def test_disarm(monkeypatch):
     g = Guard(lock=lambda: None)
-    monkeypatch.setattr(g, "_start_hooks", lambda: None)
+    monkeypatch.setattr(g, "_start_hooks", lambda: setattr(g, "hooks_ok", True))
     monkeypatch.setattr(g, "_stop_hooks", lambda: None)
     g.arm()
     assert "desativado" in g.disarm()
@@ -58,3 +58,12 @@ def test_grace_period_comes_from_the_config():
         assert should_lock(10, 45, injected=False)
     finally:
         object.__setattr__(config, "code_red_grace", old)
+
+
+def test_does_not_claim_to_be_armed_when_windows_refuses_the_hooks(monkeypatch):
+    g = Guard(lock=lambda: None)
+    monkeypatch.setattr(g, "_start_hooks", lambda: None)  # hooks_ok fica False
+    monkeypatch.setattr(g, "_stop_hooks", lambda: None)
+    assert "Não consegui" in g.arm()
+    assert not g.armed
+    assert g.on_input() is False

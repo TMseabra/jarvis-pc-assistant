@@ -46,6 +46,7 @@ class Guard:
         self.listeners: list = []  # chamados (sem argumentos) quando o code red bloqueia o PC
         self._thread: threading.Thread | None = None
         self._thread_id = 0
+        self.hooks_ok = False  # os ganchos do teclado e do rato ficaram mesmo instalados
 
     @property
     def armed(self) -> bool:
@@ -54,8 +55,13 @@ class Guard:
     def arm(self) -> str:
         if self.armed:
             return "O code red já está ativo."
-        self.armed_at = time.monotonic()
+        self.hooks_ok = False
         self._start_hooks()
+        if not self.hooks_ok:  # sem ganchos ninguém vê o teclado/rato: não prometer proteção que não existe
+            self._stop_hooks()
+            log.error("code red: não ativei, o Windows recusou vigiar o teclado/rato")
+            return "⚠️ Não consegui ativar o code red: o Windows não me deixou vigiar o teclado e o rato."
+        self.armed_at = time.monotonic()
         log.info("code red ativado")
         return (f"🔴 Code red ativo dentro de {int(config.code_red_grace)} segundos. Afasta-te do teclado e do rato: "
                 "se alguém lhes tocar, bloqueio o PC. Diz \"code green\" para desligar.")
@@ -140,8 +146,9 @@ class Guard:
         hooks = [user32.SetWindowsHookExW(13, keyboard_proc, module, 0),  # WH_KEYBOARD_LL
                  user32.SetWindowsHookExW(14, mouse_proc, module, 0)]  # WH_MOUSE_LL
         self._thread_id = kernel32.GetCurrentThreadId()
+        self.hooks_ok = all(hooks)
         ready.set()
-        if not all(hooks):
+        if not self.hooks_ok:
             log.error("code red: não consegui vigiar o teclado/rato")
         msg = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:  # mantém os ganchos vivos
